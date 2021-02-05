@@ -1106,8 +1106,10 @@ namespace MueLu {
     MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "tentative: calculate qr", bool, ptentParams);
     MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "tentative: build coarse coordinates", bool, ptentParams);
     Ptent->SetParameterList(ptentParams);
-    Ptent->SetFactory("Aggregates", manager.GetFactory("Aggregates"));
-    Ptent->SetFactory("CoarseMap",  manager.GetFactory("CoarseMap"));
+    if(levelID > 0) {
+      Ptent->SetFactory("Aggregates", this->GetFactoryManager(levelID-1)->GetFactory("Aggregates"));
+      Ptent->SetFactory("CoarseMap", this->GetFactoryManager(levelID-1)->GetFactory("CoarseMap"));
+    }
     manager.SetFactory("Ptent",     Ptent);
 
     if (reuseType == "tP" && levelID) {
