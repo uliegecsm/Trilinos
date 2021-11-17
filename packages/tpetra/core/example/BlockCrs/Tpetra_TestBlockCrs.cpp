@@ -389,6 +389,7 @@ int main (int argc, char *argv[])
       }
       // Create BlockCrsMatrix
       RCP<tpetra_blockcrs_matrix_type> A_bcrs (new tpetra_blockcrs_matrix_type (*bcrs_graph, blocksize));
+      A_bcrs->set_use_kokkos_kernel_spmv_impl(true);
 
       if (debug) {
         std::ostringstream os;

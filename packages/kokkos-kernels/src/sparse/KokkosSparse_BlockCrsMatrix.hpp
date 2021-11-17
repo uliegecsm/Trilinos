@@ -416,9 +416,9 @@ public:
   //! Type of a host-memory mirror of the sparse matrix.
   typedef BlockCrsMatrix<ScalarType, OrdinalType, host_mirror_space, MemoryTraits> HostMirror;
   //! Type of the graph structure of the sparse matrix.
-  typedef Kokkos::StaticCrsGraph<ordinal_type, Kokkos::LayoutLeft, execution_space, memory_traits, size_type> StaticCrsGraphType;
+  typedef Kokkos::StaticCrsGraph<ordinal_type, Kokkos::LayoutLeft, device_type, memory_traits, size_type> StaticCrsGraphType;
   //! Type of the graph structure of the sparse matrix - consistent with Kokkos.
-  typedef Kokkos::StaticCrsGraph<ordinal_type, Kokkos::LayoutLeft, execution_space, memory_traits, size_type> staticcrsgraph_type;
+  typedef Kokkos::StaticCrsGraph<ordinal_type, Kokkos::LayoutLeft, device_type, memory_traits, size_type> staticcrsgraph_type;
   //! Type of column indices in the sparse matrix.
   typedef typename staticcrsgraph_type::entries_type index_type;
   //! Const version of the type of column indices in the sparse matrix.
@@ -935,6 +935,15 @@ ctor_impl (const std::string &/*label*/,
   // Initialize graph using the temp entries and row_map Views
   graph = staticcrsgraph_type( tmp_entries, tmp_row_map );
 }
+
+/// \class is_block_crs_matrix
+/// \brief is_block_crs_matrix<T>::value is true if T is a BlockCrsMatrix<...>, false oterhwise
+template <typename>
+struct is_block_crs_matrix : public std::false_type {};
+template <typename... P>
+struct is_block_crs_matrix<BlockCrsMatrix<P...>> : public std::true_type {};
+template <typename... P>
+struct is_block_crs_matrix<const BlockCrsMatrix<P...>> : public std::true_type {};
 
 }} // namespace KokkosSparse::Experimental
 #endif
