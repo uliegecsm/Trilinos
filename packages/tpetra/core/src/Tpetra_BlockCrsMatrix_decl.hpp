@@ -45,8 +45,12 @@
 
 #include "Tpetra_CrsGraph.hpp"
 #include "Tpetra_RowMatrix.hpp"
+#include "Tpetra_Vector.hpp"
 #include "Tpetra_BlockMultiVector_decl.hpp"
 #include "Tpetra_CrsMatrix_decl.hpp"
+#include "Tpetra_BlockCrsMatrix_decl.hpp"
+
+#include "KokkosSparse_BlockCrsMatrix.hpp"
 
 namespace Tpetra {
 
@@ -226,6 +230,17 @@ public:
         typename row_matrix_type::values_host_view_type;
   using nonconst_values_host_view_type =
         typename row_matrix_type::nonconst_values_host_view_type;
+
+  using local_graph_device_type = typename crs_graph_type::local_graph_device_type;
+
+  using  local_matrix_device_type =
+    KokkosSparse::Experimental::BlockCrsMatrix<impl_scalar_type,
+                          local_ordinal_type,
+                          device_type,
+                          void,
+                          typename local_graph_device_type::size_type>;
+  using local_matrix_host_type =
+    typename local_matrix_device_type::HostMirror;
 
   //@}
   //! \name Constructors and destructor
@@ -1038,6 +1053,9 @@ public:
   //@}
 
 private:
+  bool use_kokkos_kernels_spmv_impl;
+public:
+  void set_use_kokkos_kernel_spmv_impl (const bool use_kokkos_kernels) { use_kokkos_kernels_spmv_impl = use_kokkos_kernels; }
 
   /// \brief Global sparse matrix-vector multiply for the transpose or
   ///   conjugate transpose cases.
@@ -1141,6 +1159,9 @@ private:
 
 
 public:
+
+  local_matrix_device_type getLocalMatrixDevice () const;
+
   //! The communicator over which this matrix is distributed.
   virtual Teuchos::RCP<const Teuchos::Comm<int> > getComm() const override;
 

@@ -49,6 +49,8 @@
 #include "Tpetra_BlockMultiVector.hpp"
 #include "Tpetra_BlockView.hpp"
 
+#include "KokkosSparse.hpp"
+
 #include "Teuchos_TimeMonitor.hpp"
 #ifdef HAVE_TPETRA_DEBUG
 #  include <set>
@@ -662,7 +664,8 @@ public:
     pointImporter_ (new Teuchos::RCP<typename crs_graph_type::import_type> ()),
     offsetPerBlock_ (0),
     localError_ (new bool (false)),
-    errs_ (new Teuchos::RCP<std::ostringstream> ()) // ptr to a null ptr
+    errs_ (new Teuchos::RCP<std::ostringstream> ()), // ptr to a null ptr
+    use_kokkos_kernels_spmv_impl(false)
   {
   }
 
@@ -679,7 +682,8 @@ public:
     pointImporter_ (new Teuchos::RCP<typename crs_graph_type::import_type> ()),
     offsetPerBlock_ (blockSize * blockSize),
     localError_ (new bool (false)),
-    errs_ (new Teuchos::RCP<std::ostringstream> ()) // ptr to a null ptr
+    errs_ (new Teuchos::RCP<std::ostringstream> ()), // ptr to a null ptr
+    use_kokkos_kernels_spmv_impl(false)
   {
     /// KK : additional check is needed that graph is fill complete.
     TEUCHOS_TEST_FOR_EXCEPTION(
@@ -742,7 +746,8 @@ public:
     pointImporter_ (new Teuchos::RCP<typename crs_graph_type::import_type> ()),
     offsetPerBlock_ (blockSize * blockSize),
     localError_ (new bool (false)),
-    errs_ (new Teuchos::RCP<std::ostringstream> ()) // ptr to a null ptr
+    errs_ (new Teuchos::RCP<std::ostringstream> ()), // ptr to a null ptr
+    use_kokkos_kernels_spmv_impl(false)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(
       ! graph_.isSorted (), std::invalid_argument, "Tpetra::"
@@ -1499,6 +1504,23 @@ public:
   }
 
   template<class Scalar, class LO, class GO, class Node>
+  typename BlockCrsMatrix<Scalar, LO, GO, Node>::local_matrix_device_type
+  BlockCrsMatrix<Scalar, LO, GO, Node>::
+  getLocalMatrixDevice () const
+  {
+    auto numCols = this->graph_.getColMap()->getNodeNumElements();
+    auto val = val_.getDeviceView(Access::ReadWrite);
+    const LO blockSize = this->getBlockSize ();
+    const auto graph = this->graph_.getLocalGraphDevice ();
+
+    return local_matrix_device_type("Tpetra::BlockCrsMatrix::lclMatrixDevice",
+                                    numCols,
+                                    val,
+                                    graph,
+                                    blockSize);
+  }
+
+  template<class Scalar, class LO, class GO, class Node>
   void
   BlockCrsMatrix<Scalar, LO, GO, Node>::
   localApplyBlockNoTrans (const BlockMultiVector<Scalar, LO, GO, Node>& X,
@@ -1522,8 +1544,14 @@ public:
     auto Y_lcl = Y_mv.getLocalViewDevice (Access::ReadWrite);
     auto val = val_.getDeviceView(Access::ReadWrite);
 
-    bcrsLocalApplyNoTrans (alpha_impl, graph, val, blockSize, X_lcl,
-                           beta_impl, Y_lcl);
+    if (use_kokkos_kernels_spmv_impl) {
+      auto A_lcl = getLocalMatrixDevice();
+      KokkosSparse::spmv (KokkosSparse::NoTranspose, alpha_impl, A_lcl, X_lcl, beta, Y_lcl);
+
+    } else {
+      bcrsLocalApplyNoTrans (alpha_impl, graph, val, blockSize, X_lcl,
+                             beta_impl, Y_lcl);
+    }
   }
 
   template<class Scalar, class LO, class GO, class Node>

@@ -389,6 +389,7 @@ int main (int argc, char *argv[])
       }
       // Create BlockCrsMatrix
       RCP<tpetra_blockcrs_matrix_type> A_bcrs (new tpetra_blockcrs_matrix_type (*bcrs_graph, blocksize));
+      A_bcrs->set_use_kokkos_kernel_spmv_impl(true);
 
       if (debug) {
         std::ostringstream os;
@@ -423,7 +424,7 @@ int main (int argc, char *argv[])
           const auto end = rowptr_host(row+1);
           typedef typename std::remove_const<decltype (beg) >::type offset_type;
           for (offset_type loc = beg; loc < end; ++loc) {
-            blocks_host(loc) = A_bcrs->getLocalBlockDeviceNonConst(row, colidx_host(loc));
+            blocks_host(loc) = A_bcrs->getLocalBlockHostNonConst(row, colidx_host(loc));
           }
         }
         //   });
