@@ -51,6 +51,7 @@
 #include "Tpetra_BlockCrsMatrix_decl.hpp"
 
 #include "KokkosSparse_BlockCrsMatrix.hpp"
+#include "KokkosSparse_BsrMatrix.hpp"
 
 namespace Tpetra {
 
@@ -234,7 +235,7 @@ public:
   using local_graph_device_type = typename crs_graph_type::local_graph_device_type;
 
   using  local_matrix_device_type =
-    KokkosSparse::Experimental::BlockCrsMatrix<impl_scalar_type,
+    KokkosSparse::Experimental::BsrMatrix<impl_scalar_type,
                           local_ordinal_type,
                           device_type,
                           void,
