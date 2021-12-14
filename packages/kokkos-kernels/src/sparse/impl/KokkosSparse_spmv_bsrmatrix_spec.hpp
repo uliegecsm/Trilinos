@@ -66,7 +66,9 @@ struct spmv_bsrmatrix_eti_spec_avail {
 };
 
 template <class AT, class AO, class AD, class AM, class AS, class XT, class XL,
-          class XD, class XM, class YT, class YL, class YD, class YM>
+          class XD, class XM, class YT, class YL, class YD, class YM,
+          const bool integerScalarType =
+              std::is_integral<typename std::decay<AT>::type>::value>
 struct spmv_mv_bsrmatrix_eti_spec_avail {
   enum : bool { value = false };
 };
@@ -110,7 +112,9 @@ struct spmv_mv_bsrmatrix_eti_spec_avail {
   };
 
 // Include which ETIs are available
+#include <KokkosSparse_spmv_bsrmatrix_tpl_spec_avail.hpp>
 #include <generated_specializations_hpp/KokkosSparse_spmv_bsrmatrix_eti_spec_avail.hpp>
+#include <generated_specializations_hpp/KokkosSparse_spmv_mv_bsrmatrix_eti_spec_avail.hpp>
 
 namespace KokkosSparse {
 namespace Experimental {
@@ -119,6 +123,8 @@ namespace Impl {
 // declaration
 template <class AT, class AO, class AD, class AM, class AS, class XT, class XL,
           class XD, class XM, class YT, class YL, class YD, class YM,
+          bool tpl_spec_avail = spmv_bsrmatrix_tpl_spec_avail<
+              AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM>::value,
           bool eti_spec_avail = spmv_bsrmatrix_eti_spec_avail<
               AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM>::value>
 struct SPMV_BSRMATRIX {
@@ -136,6 +142,10 @@ struct SPMV_BSRMATRIX {
 // declaration
 template <class AT, class AO, class AD, class AM, class AS, class XT, class XL,
           class XD, class XM, class YT, class YL, class YD, class YM,
+          const bool integerScalarType =
+              std::is_integral<typename std::decay<AT>::type>::value,
+          bool tpl_spec_avail = spmv_mv_bsrmatrix_tpl_spec_avail<
+              AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM>::value,
           bool eti_spec_avail = spmv_mv_bsrmatrix_eti_spec_avail<
               AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM>::value>
 struct SPMV_MV_BSRMATRIX {
@@ -155,7 +165,7 @@ struct SPMV_MV_BSRMATRIX {
 
 template <class AT, class AO, class AD, class AM, class AS, class XT, class XL,
           class XD, class XM, class YT, class YL, class YD, class YM>
-struct SPMV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
+struct SPMV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM, false,
                       KOKKOSKERNELS_IMPL_COMPILE_LIBRARY> {
   typedef BsrMatrix<AT, AO, AD, AM, AS> AMatrix;
   typedef Kokkos::View<XT, XL, XD, XM> XVector;
@@ -167,105 +177,16 @@ struct SPMV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
       const YScalar &alpha, const AMatrix &A, const XVector &X,
       const YScalar &beta, const YVector &Y) {
     //
-    // Whether to call KokkosKernel's native implementation, even if a TPL impl
-    // is available
-    //
-    bool useFallback = controls.isParameter("algorithm") &&
-                       controls.getParameter("algorithm") == "native";
-    //
-#ifdef KOKKOSKERNELS_ENABLE_TPL_CUSPARSE
-    // cuSPARSE does not support the conjugate mode (C), and cuSPARSE 9 only
-    // supports the normal (N) mode.
-    if (std::is_same<typename AMatrix::device_type::memory_space,
-                     Kokkos::CudaSpace>::value ||
-        std::is_same<typename AMatrix::device_type::memory_space,
-                     Kokkos::CudaUVMSpace>::value) {
-#if (9000 <= CUDA_VERSION)
-      useFallback = useFallback || (mode[0] != NoTranspose[0]);
-#endif
-#if defined(CUSPARSE_VERSION) && (10300 <= CUSPARSE_VERSION)
-      useFallback = useFallback || (mode[0] == Conjugate[0]);
-#endif
-    }
-#endif
-
-#ifdef KOKKOSKERNELS_ENABLE_TPL_MKL
-    if (std::is_same<typename AMatrix::device_type::memory_space,
-                     Kokkos::HostSpace>::value) {
-      useFallback = useFallback || (mode[0] == Conjugate[0]);
-    }
-#endif
-
-    if ((X.stride_0() == 1) && (Y.stride_0() == 1)) {
-      if ((mode[0] == KokkosSparse::NoTranspose[0]) ||
-          (mode[0] == KokkosSparse::Conjugate[0])) {
-        bool useConjugate = (mode[0] == KokkosSparse::Conjugate[0]);
-        return Bsr::spMatVec_no_transpose(controls, alpha, A, X, beta, Y,
-                                          useFallback, useConjugate);
-      } else if ((mode[0] == KokkosSparse::Transpose[0]) ||
-                 (mode[0] == KokkosSparse::ConjugateTranspose[0])) {
-        bool useConjugate = (mode[0] == KokkosSparse::ConjugateTranspose[0]);
-        return Bsr::spMatVec_transpose(controls, alpha, A, X, beta, Y,
-                                       useFallback, useConjugate);
-      }
-    }
-
-    //
-    // Fall-back un-optimized implementation
-    // This implementation is independent of the layout for the vectors X and Y
-    //
-    const auto numBlockRows = A.numRows();
-    const auto blockSize    = A.blockDim();
-    const auto blockSize2   = blockSize * blockSize;
-    using ordinal_type      = typename AMatrix::non_const_ordinal_type;
-    using ScalarType        = typename AMatrix::non_const_value_type;
-    for (ordinal_type ii = 0; ii < numBlockRows * blockSize; ++ii)
-      Y(ii) = beta * Y(ii);
-    //
     if ((mode[0] == KokkosSparse::NoTranspose[0]) ||
         (mode[0] == KokkosSparse::Conjugate[0])) {
       bool useConjugate = (mode[0] == KokkosSparse::Conjugate[0]);
-      for (ordinal_type iblock = 0; iblock < numBlockRows; ++iblock) {
-        const auto jbeg = A.graph.row_map(iblock);
-        const auto jend = A.graph.row_map(iblock + 1);
-        for (auto jb = jbeg; jb < jend; ++jb) {
-          const auto col_block = A.graph.entries(jb);
-          for (ordinal_type ir = 0; ir < blockSize; ++ir) {
-            for (ordinal_type jr = 0; jr < blockSize; ++jr) {
-              const auto avalue =
-                  (useConjugate)
-                      ? Kokkos::ArithTraits<ScalarType>::conj(
-                            A.values(jr + ir * blockSize + jb * blockSize2))
-                      : A.values(jr + ir * blockSize + jb * blockSize2);
-              Y(ir + iblock * blockSize) +=
-                  alpha * avalue * X(jr + col_block * blockSize);
-            }
-          }
-        }
-      }
-      return;
+      return Bsr::spMatVec_no_transpose(controls, alpha, A, X, beta, Y,
+                                        useConjugate);
     } else if ((mode[0] == KokkosSparse::Transpose[0]) ||
                (mode[0] == KokkosSparse::ConjugateTranspose[0])) {
       bool useConjugate = (mode[0] == KokkosSparse::ConjugateTranspose[0]);
-      for (ordinal_type iblock = 0; iblock < numBlockRows; ++iblock) {
-        const auto jbeg = A.graph.row_map(iblock);
-        const auto jend = A.graph.row_map(iblock + 1);
-        for (auto jb = jbeg; jb < jend; ++jb) {
-          const auto col_block = A.graph.entries(jb);
-          for (ordinal_type ir = 0; ir < blockSize; ++ir) {
-            for (ordinal_type jr = 0; jr < blockSize; ++jr) {
-              const auto avalue =
-                  (useConjugate)
-                      ? Kokkos::ArithTraits<ScalarType>::conj(
-                            A.values(ir + jr * blockSize + jb * blockSize2))
-                      : A.values(ir + jr * blockSize + jb * blockSize2);
-              Y(ir + col_block * blockSize) +=
-                  alpha * avalue * X(jr + iblock * blockSize);
-            }
-          }
-        }
-      }
-      return;
+      return Bsr::spMatVec_transpose(controls, alpha, A, X, beta, Y,
+                                     useConjugate);
     }
   }
 };
@@ -273,7 +194,7 @@ struct SPMV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
 template <class AT, class AO, class AD, class AM, class AS, class XT, class XL,
           class XD, class XM, class YT, class YL, class YD, class YM>
 struct SPMV_MV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
-                         KOKKOSKERNELS_IMPL_COMPILE_LIBRARY> {
+                         false, false, KOKKOSKERNELS_IMPL_COMPILE_LIBRARY> {
   typedef BsrMatrix<AT, AO, AD, AM, AS> AMatrix;
   typedef Kokkos::View<XT, XL, XD, XM> XVector;
   typedef Kokkos::View<YT, YL, YD, YM> YVector;
@@ -293,17 +214,6 @@ struct SPMV_MV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
         requestDouble = true;
       }
     }
-
-    /*
-  #if defined(KOKKOS_ENABLE_CUDA) && \
-    (defined(KOKKOS_ARCH_VOLTA) || defined(KOKKOS_ARCH_AMPERE))
-    if ((mode[0] == NoTranspose[0]) &&
-  (KokkosKernels::Impl::kk_is_gpu_mem_space< typename AMatrix::memory_space>())
-  && (KokkosKernels::Impl::kk_is_gpu_mem_space< typename
-  XVector::memory_space>()) && (KokkosKernels::Impl::kk_is_gpu_mem_space<
-    typename yVector::memory_space>()))
-  #endif
-  */
 
 #if defined(KOKKOS_ARCH_AMPERE)
     typedef typename XVector::non_const_value_type XScalar;
@@ -341,7 +251,6 @@ struct SPMV_MV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
                                         YVector, double, 8, 8,
                                         4>::dispatch(alpha, A, x, beta, y);
     }
-
 #elif defined(KOKKOS_ARCH_VOLTA)
     /* Volta has float += half * half
        use it for all matrices
@@ -357,127 +266,62 @@ struct SPMV_MV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
     (void)requestMixed;  // unused
 #endif  // KOKKOS_ARCH
 
-    //
-    // Whether to call KokkosKernel's native implementation, even if a TPL impl
-    // is available
-    //
-    bool useFallback = controls.isParameter("algorithm") &&
-                       controls.getParameter("algorithm") == "native";
-    //
-#ifdef KOKKOSKERNELS_ENABLE_TPL_CUSPARSE
-    // cuSPARSE does not support the conjugate mode (C), and cuSPARSE 9 only
-    // supports the normal (N) mode.
-    if (std::is_same<typename AMatrix::device_type::memory_space,
-                     Kokkos::CudaSpace>::value ||
-        std::is_same<typename AMatrix::device_type::memory_space,
-                     Kokkos::CudaUVMSpace>::value) {
-#if (9000 <= CUDA_VERSION)
-      useFallback = useFallback || (mode[0] != NoTranspose[0]);
-#endif
-#if defined(CUSPARSE_VERSION) && (10300 <= CUSPARSE_VERSION)
-      useFallback = useFallback || (mode[0] == Conjugate[0]);
-#endif
-    }
-#endif
-
-#ifdef KOKKOSKERNELS_ENABLE_TPL_MKL
-    if (std::is_same<typename AMatrix::device_type::memory_space,
-                     Kokkos::HostSpace>::value) {
-      useFallback = useFallback || (mode[0] == Conjugate[0]);
-    }
-#endif
-
-    if ((X.stride_0() == 1) && (Y.stride_0() == 1)) {
-      if ((mode[0] == KokkosSparse::NoTranspose[0]) ||
-          (mode[0] == KokkosSparse::Conjugate[0])) {
-        bool useConjugate = (mode[0] == KokkosSparse::Conjugate[0]);
-        if (X.extent(1) == 1) {
-          const auto x0 = Kokkos::subview(X, Kokkos::ALL(), 0);
-          auto y0       = Kokkos::subview(Y, Kokkos::ALL(), 0);
-          return Bsr::spMatVec_no_transpose(controls, alpha, A, x0, beta, y0,
-                                            useFallback, useConjugate);
-        } else {
-          return Bsr::spMatMultiVec_no_transpose(controls, alpha, A, X, beta, Y,
-                                                 useFallback, useConjugate);
-        }
-      } else if ((mode[0] == KokkosSparse::Transpose[0]) ||
-                 (mode[0] == KokkosSparse::ConjugateTranspose[0])) {
-        bool useConjugate = (mode[0] == KokkosSparse::ConjugateTranspose[0]);
-        if (X.extent(1) == 1) {
-          const auto x0 = Kokkos::subview(X, Kokkos::ALL(), 0);
-          auto y0       = Kokkos::subview(Y, Kokkos::ALL(), 0);
-          return Bsr::spMatVec_transpose(controls, alpha, A, x0, beta, y0,
-                                         useFallback, useConjugate);
-        } else {
-          return Bsr::spMatMultiVec_transpose(controls, alpha, A, X, beta, Y,
-                                              useFallback, useConjugate);
-        }
-      }
-    }
-
-    //
-    // Fall-back un-optimized implementation
-    // This implementation is independent of the layout for the vectors X and Y
-    //
-    const auto numBlockRows = A.numRows();
-    const auto blockSize    = A.blockDim();
-    const auto blockSize2   = blockSize * blockSize;
-    using ordinal_type      = typename AMatrix::non_const_ordinal_type;
-    using ScalarType        = typename AMatrix::non_const_value_type;
-    for (ordinal_type jc = 0; jc < X.extent(1); ++jc)
-      for (ordinal_type ii = 0; ii < numBlockRows * blockSize; ++ii)
-        Y(ii, jc) = beta * Y(ii, jc);
-    //
     if ((mode[0] == KokkosSparse::NoTranspose[0]) ||
         (mode[0] == KokkosSparse::Conjugate[0])) {
       bool useConjugate = (mode[0] == KokkosSparse::Conjugate[0]);
-      for (ordinal_type iblock = 0; iblock < numBlockRows; ++iblock) {
-        const auto jbeg = A.graph.row_map(iblock);
-        const auto jend = A.graph.row_map(iblock + 1);
-        for (auto jb = jbeg; jb < jend; ++jb) {
-          const auto col_block = A.graph.entries(jb);
-          for (ordinal_type ir = 0; ir < blockSize; ++ir) {
-            for (ordinal_type jr = 0; jr < blockSize; ++jr) {
-              const auto avalue =
-                  (useConjugate)
-                      ? Kokkos::ArithTraits<ScalarType>::conj(
-                            A.values(jr + ir * blockSize + jb * blockSize2))
-                      : A.values(jr + ir * blockSize + jb * blockSize2);
-              for (ordinal_type jc = 0; jc < X.extent(1); ++jc)
-                Y(ir + iblock * blockSize, jc) +=
-                    alpha * avalue * X(jr + col_block * blockSize, jc);
-            }
-          }
-        }
+      if (X.extent(1) == 1) {
+        const auto x0 = Kokkos::subview(X, Kokkos::ALL(), 0);
+        auto y0       = Kokkos::subview(Y, Kokkos::ALL(), 0);
+        return Bsr::spMatVec_no_transpose(controls, alpha, A, x0, beta, y0,
+                                          useConjugate);
+      } else {
+        return Bsr::spMatMultiVec_no_transpose(controls, alpha, A, X, beta, Y,
+                                               useConjugate);
       }
-      return;
     } else if ((mode[0] == KokkosSparse::Transpose[0]) ||
                (mode[0] == KokkosSparse::ConjugateTranspose[0])) {
       bool useConjugate = (mode[0] == KokkosSparse::ConjugateTranspose[0]);
-      for (ordinal_type iblock = 0; iblock < numBlockRows; ++iblock) {
-        const auto jbeg = A.graph.row_map(iblock);
-        const auto jend = A.graph.row_map(iblock + 1);
-        for (auto jb = jbeg; jb < jend; ++jb) {
-          const auto col_block = A.graph.entries(jb);
-          for (ordinal_type ir = 0; ir < blockSize; ++ir) {
-            for (ordinal_type jr = 0; jr < blockSize; ++jr) {
-              const auto avalue =
-                  (useConjugate)
-                      ? Kokkos::ArithTraits<ScalarType>::conj(
-                            A.values(ir + jr * blockSize + jb * blockSize2))
-                      : A.values(ir + jr * blockSize + jb * blockSize2);
-              for (ordinal_type jc = 0; jc < X.extent(1); ++jc)
-                Y(ir + col_block * blockSize, jc) +=
-                    alpha * avalue * X(jr + iblock * blockSize, jc);
-            }
-          }
-        }
+      if (X.extent(1) == 1) {
+        const auto x0 = Kokkos::subview(X, Kokkos::ALL(), 0);
+        auto y0       = Kokkos::subview(Y, Kokkos::ALL(), 0);
+        return Bsr::spMatVec_transpose(controls, alpha, A, x0, beta, y0,
+                                       useConjugate);
+      } else {
+        return Bsr::spMatMultiVec_transpose(controls, alpha, A, X, beta, Y,
+                                            useConjugate);
       }
-      return;
     }
   }
 };
 
+template <class AT, class AO, class AD, class AM, class AS, class XT, class XL,
+          class XD, class XM, class YT, class YL, class YD, class YM>
+struct SPMV_MV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
+                         true, false, KOKKOSKERNELS_IMPL_COMPILE_LIBRARY> {
+  typedef BsrMatrix<AT, AO, AD, AM, AS> AMatrix;
+  typedef Kokkos::View<XT, XL, XD, XM> XVector;
+  typedef Kokkos::View<YT, YL, YD, YM> YVector;
+  typedef typename YVector::non_const_value_type YScalar;
+
+  static void spmv_mv_bsrmatrix(
+      const KokkosKernels::Experimental::Controls &controls, const char mode[],
+      const YScalar &alpha, const AMatrix &A, const XVector &X,
+      const YScalar &beta, const YVector &Y) {
+    static_assert(std::is_integral<AT>::value,
+                  "This implementation is only for integer Scalar types.");
+    typedef SPMV_BSRMATRIX<AT, AO, AD, AM, AS, typename XVector::value_type *,
+                           XL, XD, XM, typename YVector::value_type *, YL, YD,
+                           YM>
+        impl_type;
+    KokkosKernels::Experimental::Controls defaultControls;
+    for (typename AMatrix::non_const_size_type j = 0; j < X.extent(1); ++j) {
+      auto x_j = Kokkos::subview(X, Kokkos::ALL(), j);
+      auto y_j = Kokkos::subview(Y, Kokkos::ALL(), j);
+      impl_type::spmv_bsrmatrix(defaultControls, mode, alpha, A, x_j, beta,
+                                y_j);
+    }
+  }
+};
 #endif  // !defined(KOKKOSKERNELS_ETI_ONLY) ||
         // KOKKOSKERNELS_IMPL_COMPILE_LIBRARY
 }  // namespace Impl
@@ -499,7 +343,7 @@ struct SPMV_MV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
       Kokkos::MemoryTraits<Kokkos::Unmanaged | Kokkos::RandomAccess>,     \
       SCALAR_TYPE *, LAYOUT_TYPE,                                         \
       Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                    \
-      Kokkos::MemoryTraits<Kokkos::Unmanaged>, true>;
+      Kokkos::MemoryTraits<Kokkos::Unmanaged>, false, true>;
 
 #define KOKKOSSPARSE_SPMV_BSRMATRIX_ETI_SPEC_INST(                        \
     SCALAR_TYPE, ORDINAL_TYPE, OFFSET_TYPE, LAYOUT_TYPE, EXEC_SPACE_TYPE, \
@@ -513,39 +357,45 @@ struct SPMV_MV_BSRMATRIX<AT, AO, AD, AM, AS, XT, XL, XD, XM, YT, YL, YD, YM,
       Kokkos::MemoryTraits<Kokkos::Unmanaged | Kokkos::RandomAccess>,     \
       SCALAR_TYPE *, LAYOUT_TYPE,                                         \
       Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                    \
-      Kokkos::MemoryTraits<Kokkos::Unmanaged>, true>;
+      Kokkos::MemoryTraits<Kokkos::Unmanaged>, false, true>;
 
 // declare / instantiate the 2D MV version
 // Instantiate with A,x,y are all the requested Scalar type (no instantiation of
 // mixed-precision operands)
-#define KOKKOSSPARSE_SPMV_MV_BSRMATRIX_ETI_SPEC_DECL(                     \
-    SCALAR_TYPE, ORDINAL_TYPE, OFFSET_TYPE, LAYOUT_TYPE, EXEC_SPACE_TYPE, \
-    MEM_SPACE_TYPE)                                                       \
-  extern template struct SPMV_MV_BSRMATRIX<                               \
-      const SCALAR_TYPE, const ORDINAL_TYPE,                              \
-      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                    \
-      Kokkos::MemoryTraits<Kokkos::Unmanaged>, const OFFSET_TYPE,         \
-      SCALAR_TYPE const **, LAYOUT_TYPE,                                  \
-      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                    \
-      Kokkos::MemoryTraits<Kokkos::Unmanaged | Kokkos::RandomAccess>,     \
-      SCALAR_TYPE **, LAYOUT_TYPE,                                        \
-      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                    \
-      Kokkos::MemoryTraits<Kokkos::Unmanaged>, true>;
+#define KOKKOSSPARSE_SPMV_MV_BSRMATRIX_ETI_SPEC_DECL(                         \
+    SCALAR_TYPE, ORDINAL_TYPE, OFFSET_TYPE, LAYOUT_TYPE, EXEC_SPACE_TYPE,     \
+    MEM_SPACE_TYPE)                                                           \
+  extern template struct SPMV_MV_BSRMATRIX<                                   \
+      const SCALAR_TYPE, const ORDINAL_TYPE,                                  \
+      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                        \
+      Kokkos::MemoryTraits<Kokkos::Unmanaged>, const OFFSET_TYPE,             \
+      SCALAR_TYPE const **, LAYOUT_TYPE,                                      \
+      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                        \
+      Kokkos::MemoryTraits<Kokkos::Unmanaged | Kokkos::RandomAccess>,         \
+      SCALAR_TYPE **, LAYOUT_TYPE,                                            \
+      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                        \
+      Kokkos::MemoryTraits<Kokkos::Unmanaged>,                                \
+      std::is_integral<typename std::decay<SCALAR_TYPE>::type>::value, false, \
+      true>;
 
-#define KOKKOSSPARSE_SPMV_MV_BSRMATRIX_ETI_SPEC_INST(                     \
-    SCALAR_TYPE, ORDINAL_TYPE, OFFSET_TYPE, LAYOUT_TYPE, EXEC_SPACE_TYPE, \
-    MEM_SPACE_TYPE)                                                       \
-  template struct SPMV_MV_BSRMATRIX<                                      \
-      const SCALAR_TYPE, const ORDINAL_TYPE,                              \
-      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                    \
-      Kokkos::MemoryTraits<Kokkos::Unmanaged>, const OFFSET_TYPE,         \
-      SCALAR_TYPE const **, LAYOUT_TYPE,                                  \
-      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                    \
-      Kokkos::MemoryTraits<Kokkos::Unmanaged | Kokkos::RandomAccess>,     \
-      SCALAR_TYPE **, LAYOUT_TYPE,                                        \
-      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                    \
-      Kokkos::MemoryTraits<Kokkos::Unmanaged>, true>;
+#define KOKKOSSPARSE_SPMV_MV_BSRMATRIX_ETI_SPEC_INST(                         \
+    SCALAR_TYPE, ORDINAL_TYPE, OFFSET_TYPE, LAYOUT_TYPE, EXEC_SPACE_TYPE,     \
+    MEM_SPACE_TYPE)                                                           \
+  template struct SPMV_MV_BSRMATRIX<                                          \
+      const SCALAR_TYPE, const ORDINAL_TYPE,                                  \
+      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                        \
+      Kokkos::MemoryTraits<Kokkos::Unmanaged>, const OFFSET_TYPE,             \
+      SCALAR_TYPE const **, LAYOUT_TYPE,                                      \
+      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                        \
+      Kokkos::MemoryTraits<Kokkos::Unmanaged | Kokkos::RandomAccess>,         \
+      SCALAR_TYPE **, LAYOUT_TYPE,                                            \
+      Kokkos::Device<EXEC_SPACE_TYPE, MEM_SPACE_TYPE>,                        \
+      Kokkos::MemoryTraits<Kokkos::Unmanaged>,                                \
+      std::is_integral<typename std::decay<SCALAR_TYPE>::type>::value, false, \
+      true>;
 
+#include <KokkosSparse_spmv_bsrmatrix_tpl_spec_decl.hpp>
 #include <generated_specializations_hpp/KokkosSparse_spmv_bsrmatrix_eti_spec_decl.hpp>
+#include <generated_specializations_hpp/KokkosSparse_spmv_mv_bsrmatrix_eti_spec_decl.hpp>
 
 #endif  // KOKKOSSPARSE_IMPL_SPMV_BSRMATRIX_SPEC_HPP_
