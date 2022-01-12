@@ -5202,6 +5202,8 @@ CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
       }
     }
     else { // need to Import source (multi)vector
+      Teuchos::TimeMonitor timer71(*Teuchos::TimeMonitor::getNewTimer("7.1)   PointCrs doImport"));
+
       ProfilingRegion regionImport ("Tpetra::CrsMatrix::apply: Import");
 
       // We're doing an Import anyway, which will copy the relevant
@@ -5430,6 +5432,8 @@ CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
               const Scalar& alpha,
               const Scalar& beta) const
   {
+    Teuchos::TimeMonitor timer72(*Teuchos::TimeMonitor::getNewTimer("7.2)   PointCrs local apply"));
+
     using Tpetra::Details::ProfilingRegion;
     using Teuchos::NO_TRANS;
     ProfilingRegion regionLocalApply ("Tpetra::CrsMatrix::localApply");

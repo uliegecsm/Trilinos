@@ -126,6 +126,8 @@ packages/muelu/doc/UsersGuide/mueluguide.pdf
 
 rsync.*
 
+packages/kokkos-kernels-old/
+
 # Ignore files that get created by checkin-test.py to allow checkin-test.py to
 # be run in source dir.
 /TrilinosPackageDependencies.generate.out

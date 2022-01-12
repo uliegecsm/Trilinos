@@ -389,7 +389,13 @@ int main (int argc, char *argv[])
       }
       // Create BlockCrsMatrix
       RCP<tpetra_blockcrs_matrix_type> A_bcrs (new tpetra_blockcrs_matrix_type (*bcrs_graph, blocksize));
-      A_bcrs->set_use_kokkos_kernel_spmv_impl(true);
+      A_bcrs->set_use_kokkos_kernel_spmv_impl(false);
+
+
+      auto commWorld = Tpetra::getDefaultComm ();
+      if (commWorld->getRank() == 0)
+        std::cout << "BlockCRS-dim: " << A_bcrs->getGlobalNumRows() << " x " << A_bcrs->getGlobalNumCols()
+                  << " : " << A_bcrs->getGlobalNumEntries() << std::endl;
 
       if (debug) {
         std::ostringstream os;
@@ -597,6 +603,11 @@ int main (int argc, char *argv[])
                                                col_crs_map,
                                                local_matrix,
                                                Teuchos::null));
+
+        if (commWorld->getRank() == 0)
+          std::cout << "CRS-dim: " << A_crs->getGlobalNumRows() << " x " << A_crs->getGlobalNumCols()
+                    << " : " << A_crs->getGlobalNumEntries() << std::endl;
+
 
       } // end conversion timer
 

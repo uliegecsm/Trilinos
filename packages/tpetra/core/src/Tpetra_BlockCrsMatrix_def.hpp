@@ -1439,6 +1439,8 @@ public:
         }
       }
       else {
+        Teuchos::TimeMonitor timer51(*Teuchos::TimeMonitor::getNewTimer("5.1)   BlockCrs doImport"));
+
         // X_colMap_ is a pointer to a pointer to BMV.  Ditto for
         // Y_rowMap_ below.  This lets us do lazy initialization
         // correctly with view semantics of BlockCrsMatrix.  All views
@@ -1484,6 +1486,7 @@ public:
       }
 
       try {
+        Teuchos::TimeMonitor timer52(*Teuchos::TimeMonitor::getNewTimer("5.2)   BlockCrs local apply"));
         localApplyBlockNoTrans (*X_colMap, *Y_rowMap, alpha, beta);
       }
       catch (std::exception& e) {
