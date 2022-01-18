@@ -1454,6 +1454,8 @@ public:
                                      static_cast<LO> (X.getNumVectors ())));
         }
 
+        const int myRank = this->graph_.getRowMap ()->getComm ()->getRank ();
+        if (myRank == 0)
         std::cout << (*X_colMap_)->getMultiVectorView().getNumVectors() << "   "
                   << (*X_colMap_)->getMultiVectorView().getGlobalLength() << "   "
                   << std::endl;
