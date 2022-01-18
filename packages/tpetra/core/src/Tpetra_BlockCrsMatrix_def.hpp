@@ -1453,6 +1453,11 @@ public:
           *X_colMap_ = rcp (new BMV (* (graph_.getColMap ()), getBlockSize (),
                                      static_cast<LO> (X.getNumVectors ())));
         }
+
+        std::cout << (*X_colMap_)->getMultiVectorView().getNumVectors() << "   "
+                  << (*X_colMap_)->getMultiVectorView().getGlobalLength() << "   "
+                  << std::endl;
+
         (*X_colMap_)->getMultiVectorView().doImport (X.getMultiVectorView (),
                                                      **pointImporter_,
                                                      ::Tpetra::REPLACE);

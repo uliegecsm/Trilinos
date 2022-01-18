@@ -43,6 +43,7 @@
 #include "Tpetra_Details_Behavior.hpp"
 #include "Tpetra_BlockView.hpp"
 #include "Teuchos_OrdinalTraits.hpp"
+#include "Tpetra_BlockMultiVector_decl.hpp"
 
 #ifdef TPETRA_ENABLE_DEPRECATED_CODE
 namespace { // anonymous
