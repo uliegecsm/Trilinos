@@ -388,7 +388,8 @@ int main (int argc, char *argv[])
         std::cerr << os.str ();
       }
       // Create BlockCrsMatrix
-      RCP<tpetra_blockcrs_matrix_type> A_bcrs (new tpetra_blockcrs_matrix_type (*bcrs_graph, blocksize));
+      const bool use_kokkos_kernels = false;
+      RCP<tpetra_blockcrs_matrix_type> A_bcrs (new tpetra_blockcrs_matrix_type (*bcrs_graph, blocksize, use_kokkos_kernels));
 
       if (debug) {
         std::ostringstream os;
@@ -423,7 +424,7 @@ int main (int argc, char *argv[])
           const auto end = rowptr_host(row+1);
           typedef typename std::remove_const<decltype (beg) >::type offset_type;
           for (offset_type loc = beg; loc < end; ++loc) {
-            blocks_host(loc) = A_bcrs->getLocalBlockDeviceNonConst(row, colidx_host(loc));
+            blocks_host(loc) = A_bcrs->getLocalBlockHostNonConst(row, colidx_host(loc));
           }
         }
         //   });
@@ -637,11 +638,14 @@ int main (int argc, char *argv[])
         B_bcrs->dot(*B_bcrs, norm2);
         B_crs->dot(*B_crs, diff2);
 
-        if (myProcessPrintsDuringTheTest) {
-          for (LO i = 0; i < nrhs; ++i) {
+        for (LO i = 0; i < nrhs; ++i) {
+          const value_type err = std::sqrt(diff2(i)/norm2(i));
+          if (myProcessPrintsDuringTheTest) {
             std::cout << "Column = " << i << "  Error norm = "
-                      << std::sqrt(diff2(i)/norm2(i)) << endl;
+                      << err << endl;
           }
+          const value_type epsilon = 100.*Teuchos::ScalarTraits<value_type>::eps();
+          TEUCHOS_ASSERT(err<epsilon);
         }
       }
 
