@@ -225,6 +225,9 @@ class BatchedSerialGemm;
 ///                             by tile sizes.
 ///                             BoundsCheck::Yes The functor will     perform bound checks (recommended)
 ///                             BoundsCheck::No  The functor will NOT perform bound checks
+/// \tparam ArgAlphaFmaTag      Specifies whether to apply alpha during fmas.
+///                             AlphaFmaTag::Yes alpha will be applied during fma (C = C * alpha + AB).
+///                             AlphaFmaTag::No  alpha will be applied during mul (A * B * alpha).
 /// \tparam TILE_M              Specifies the number of rows in each tile.
 /// \tparam TILE_N              Specifies the number of cols in each tile.
 /// \tparam TILE_K              Specifies the number of cols or rows in a tile of A or tile of B, respectively.
@@ -250,8 +253,8 @@ class BatchedSerialGemm;
 // clang-format on
 template <class ArgTransA, class ArgTransB, class ArgBatchSzDim,
           class HandleType, class ScalarType, class AViewType, class BViewType,
-          class CViewType, class ArgBoundsCheck, int tile_m, int tile_n,
-          int tile_k>
+          class CViewType, class ArgBoundsCheck, class ArgAlphaFmaTag,
+          int tile_m, int tile_n, int tile_k>
 class BatchedDblBufGemm;
 /********************* END forward declarations *********************/
 }  // namespace Impl
@@ -319,17 +322,18 @@ int BatchedGemm(BatchedGemmHandleType *const handle, const ScalarType alpha,
   size_t c_m, c_n;
   using ViewValueType = typename CViewType::value_type;
   // Check for valid input views
-  static_assert(Kokkos::Impl::is_view<AViewType>::value,
+  static_assert(Kokkos::is_view<AViewType>::value,
                 "AViewType must be a Kokkos::View.");
-  static_assert(Kokkos::Impl::is_view<BViewType>::value,
+  static_assert(Kokkos::is_view<BViewType>::value,
                 "BViewType must be a Kokkos::View.");
-  static_assert(Kokkos::Impl::is_view<CViewType>::value,
+  static_assert(Kokkos::is_view<CViewType>::value,
                 "CViewType must be a Kokkos::View.");
   if (is_vector<ViewValueType>::value) {
     // Check ranks of view with underlying SIMD value types
     // For SIMD views, we can have either 3-rank or 4-ranks inputs.
     switch (handle->get_kernel_algo_type()) {
       case BaseKokkosBatchedAlgos::KK_SERIAL:
+      case BaseHeuristicAlgos::SQUARE:
         static_assert(static_cast<int>(AViewType::rank) == 3,
                       "AViewType must have rank 3.");
         static_assert(static_cast<int>(BViewType::rank) == 3,
@@ -452,37 +456,70 @@ int BatchedGemm(BatchedGemmHandleType *const handle, const ScalarType alpha,
                                         Algo::Gemm::Blocked>::type>::type>::
           type;
 
+      if (handle->enableDebug) {
+        std::cout << "bsgResultsPerThread: "
+                  << typeid(bsgResultsPerThread).name() << std::endl
+                  << "bsgModeType: " << typeid(bsgModeType).name() << std::endl;
+      }
+
       // if (on_gpu && c_m >= 20 &&
       //     (alpha == 1.0F && beta == 0.0F) ? c_m <= 24 : c_m <= 21) {
       //   // TODO: invoke TeamShmem
       // } else
-      if (on_gpu &&
-          ((std::is_same<layout_type, Kokkos::LayoutLeft>::value)
-               ? (c_m >= 16)
-               : (c_m >= 24 && c_m <= 32) || (c_m >= 45 && c_m <= 64))) {
+      if (on_gpu && ((std::is_same<layout_type, Kokkos::LayoutLeft>::value)
+                         ? (c_m >= 16)
+                         : (c_m >= 24 && c_m <= 32) || c_m >= 40)) {
         handle->teamSz = handle->vecLen = 8;
         constexpr int tile_m = 32, tile_n = 32, tile_k = 8;
-        if (c_m % 32 == 0)  // No bounds checking
-          ret =
-              Impl::BatchedDblBufGemm<ArgTransA, ArgTransB, ArgBatchSzDim,
-                                      BatchedGemmHandleType, ScalarType,
-                                      AViewType, BViewType, CViewType,
-                                      BoundsCheck::No, tile_m, tile_n, tile_k>(
-                  handle, alpha, A, B, beta, C)
-                  .invoke();
-        else
-          ret =
-              Impl::BatchedDblBufGemm<ArgTransA, ArgTransB, ArgBatchSzDim,
-                                      BatchedGemmHandleType, ScalarType,
-                                      AViewType, BViewType, CViewType,
-                                      BoundsCheck::Yes, tile_m, tile_n, tile_k>(handle, alpha, A, B, beta, C)
-                  .invoke();
+#ifdef __CUDACC_RDC__
+        constexpr size_t alpha_in_fma_thresh = 24;
+#else
+        constexpr size_t alpha_in_fma_thresh = 64;
+#endif  // __CUDAACC_RDC__
+
+        if (c_m % 32 == 0) {                 // No bounds checking
+          if (c_m >= alpha_in_fma_thresh) {  // apply alpha in fma
+            ret =
+                Impl::BatchedDblBufGemm<
+                    ArgTransA, ArgTransB, ArgBatchSzDim, BatchedGemmHandleType,
+                    ScalarType, AViewType, BViewType, CViewType,
+                    BoundsCheck::No, AlphaTag::Yes, tile_m, tile_n, tile_k>(
+                    handle, alpha, A, B, beta, C)
+                    .invoke();
+          } else {  // apply alpha in mul
+            ret =
+                Impl::BatchedDblBufGemm<
+                    ArgTransA, ArgTransB, ArgBatchSzDim, BatchedGemmHandleType,
+                    ScalarType, AViewType, BViewType, CViewType,
+                    BoundsCheck::No, AlphaTag::No, tile_m, tile_n, tile_k>(
+                    handle, alpha, A, B, beta, C)
+                    .invoke();
+          }
+        } else {                             // bounds checking
+          if (c_m >= alpha_in_fma_thresh) {  // apply alpha in fma
+            ret =
+                Impl::BatchedDblBufGemm<
+                    ArgTransA, ArgTransB, ArgBatchSzDim, BatchedGemmHandleType,
+                    ScalarType, AViewType, BViewType, CViewType,
+                    BoundsCheck::Yes, AlphaTag::Yes, tile_m, tile_n, tile_k>(
+                    handle, alpha, A, B, beta, C)
+                    .invoke();
+          } else {  // apply alpha in mul
+            ret =
+                Impl::BatchedDblBufGemm<
+                    ArgTransA, ArgTransB, ArgBatchSzDim, BatchedGemmHandleType,
+                    ScalarType, AViewType, BViewType, CViewType,
+                    BoundsCheck::Yes, AlphaTag::No, tile_m, tile_n, tile_k>(
+                    handle, alpha, A, B, beta, C)
+                    .invoke();
+          }
+        }
       } else {
         ret = Impl::BatchedSerialGemm<ArgTransA, ArgTransB, bsgModeType,
                                       ArgBatchSzDim, bsgResultsPerThread,
                                       ScalarType, AViewType, BViewType,
                                       CViewType>(alpha, A, B, beta, C)
-                .invoke();
+                  .invoke();
       }
       break;
 
@@ -493,12 +530,12 @@ int BatchedGemm(BatchedGemmHandleType *const handle, const ScalarType alpha,
       // follow an approach similar to KK_SQUARE above for best performance.
 
       // TODO: Add auto-selection of tile size based on inputs and device type
-      ret =
-          Impl::BatchedDblBufGemm<ArgTransA, ArgTransB, ArgBatchSzDim,
-                                  BatchedGemmHandleType, ScalarType, AViewType,
-                                  BViewType, CViewType, BoundsCheck::Yes, 1, 1,
-                                  1>(handle, alpha, A, B, beta, C)
-              .invoke();
+      ret = Impl::BatchedDblBufGemm<ArgTransA, ArgTransB, ArgBatchSzDim,
+                                    BatchedGemmHandleType, ScalarType,
+                                    AViewType, BViewType, CViewType,
+                                    BoundsCheck::Yes, AlphaTag::No, 1, 1, 1>(
+                handle, alpha, A, B, beta, C)
+                .invoke();
       break;
 
     case GemmKokkosBatchedAlgos::KK_SERIAL_RANK0:

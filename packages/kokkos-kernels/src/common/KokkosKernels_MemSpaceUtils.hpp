@@ -36,23 +36,43 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Questions? Contact Luc Berger-Vergiat (lberge@sandia.gov)
+// Questions? Contact Siva Rajamanickam (srajama@sandia.gov)
 //
 // ************************************************************************
 //@HEADER
 */
 
-#ifndef KOKKOS_SPARSE_BSRMATRIX_IMPL_HPP_
-#define KOKKOS_SPARSE_BSRMATRIX_IMPL_HPP_
+#ifndef _KOKKOSKERNELSUTILSMEMSPACEUTILS_HPP
+#define _KOKKOSKERNELSUTILSMEMSPACEUTILS_HPP
 
-#include <set>
-#include <sstream>
-#include <stdexcept>
-#include <type_traits>
+#include "Kokkos_Cuda.hpp"
 
-#include "Kokkos_Core.hpp"
-#include "Kokkos_StaticCrsGraph.hpp"
-#include "Kokkos_ArithTraits.hpp"
-#include "KokkosSparse_CrsMatrix.hpp"
+namespace KokkosKernels {
+namespace Impl {
 
-#endif // KOKKOS_SPARSE_BSRMATRIX_IMPL_HPP_
+template <typename MemorySpace>
+constexpr KOKKOS_INLINE_FUNCTION bool kk_is_gpu_mem_space() {
+  return false;
+}
+
+#ifdef KOKKOS_ENABLE_CUDA
+template <>
+constexpr KOKKOS_INLINE_FUNCTION bool kk_is_gpu_mem_space<Kokkos::CudaSpace>() {
+  return true;
+}
+template <>
+constexpr KOKKOS_INLINE_FUNCTION bool
+kk_is_gpu_mem_space<Kokkos::CudaUVMSpace>() {
+  return true;
+}
+template <>
+constexpr KOKKOS_INLINE_FUNCTION bool
+kk_is_gpu_mem_space<Kokkos::CudaHostPinnedSpace>() {
+  return true;
+}
+#endif
+
+}  // namespace Impl
+}  // namespace KokkosKernels
+
+#endif
