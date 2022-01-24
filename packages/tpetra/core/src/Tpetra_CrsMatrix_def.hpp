@@ -5250,7 +5250,11 @@ CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
       RCP<MV> X_colMapNonConst = getColumnMapMultiVector (X_in);
 
       // Import from the domain Map MV to the column Map MV.
-      X_colMapNonConst->doImport (X_in, *importer, INSERT);
+      {
+        Teuchos::TimeMonitor timer71(*Teuchos::TimeMonitor::getNewTimer("7.1)   PointCrs doImport"));
+
+        X_colMapNonConst->doImport (X_in, *importer, INSERT);
+      }
       X_colMap = rcp_const_cast<const MV> (X_colMapNonConst);
     }
 

@@ -45,6 +45,7 @@
 #include "KokkosSparse.hpp"
 #include "Teuchos_TestForException.hpp"
 #include "Teuchos_OrdinalTraits.hpp"
+#include "Teuchos_TimeMonitor.hpp"
 
 namespace Tpetra {
 
@@ -114,14 +115,18 @@ apply (Kokkos::View<const mv_scalar_type**, array_layout,
      KokkosSparse::Transpose) : KokkosSparse::NoTranspose;
   //Currently KK has no cusparse wrapper for rank-2 (SpMM)
   //TODO: whent that is supported, use A_cusparse for that case also
-  if(X.extent(1) == size_t(1) && have_A_cusparse)
   {
-    KokkosSparse::spmv (op, alpha, A_cusparse, Kokkos::subview(X, Kokkos::ALL(), 0),
-                            beta, Kokkos::subview(Y, Kokkos::ALL(), 0));
-  }
-  else
-  {
-    KokkosSparse::spmv (op, alpha, *A_, X, beta, Y);
+    Teuchos::TimeMonitor timer72(*Teuchos::TimeMonitor::getNewTimer("7.2)   PointCrs local apply"));
+
+    if(X.extent(1) == size_t(1) && have_A_cusparse)
+    {
+      KokkosSparse::spmv (op, alpha, A_cusparse, Kokkos::subview(X, Kokkos::ALL(), 0),
+                              beta, Kokkos::subview(Y, Kokkos::ALL(), 0));
+    }
+    else
+    {
+      KokkosSparse::spmv (op, alpha, *A_, X, beta, Y);
+    }
   }
 }
 
