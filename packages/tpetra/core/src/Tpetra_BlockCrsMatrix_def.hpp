@@ -1554,7 +1554,9 @@ public:
         Teuchos::TimeMonitor timer52(*Teuchos::TimeMonitor::getNewTimer("5.2)   BlockCrs local apply (kokkoskernels)"));
 
         auto A_lcl = getLocalMatrixDevice();
-        KokkosSparse::spmv (KokkosSparse::NoTranspose, alpha_impl, A_lcl, X_lcl, beta, Y_lcl);
+        KokkosSparse::spmv (KokkosSparse::NoTranspose, alpha_impl, A_lcl,
+                            Kokkos::subview(X_lcl, Kokkos::ALL(), 0),
+                            beta, Kokkos::subview(Y_lcl, Kokkos::ALL(), 0));
 
       } else {
         Teuchos::TimeMonitor timer52(*Teuchos::TimeMonitor::getNewTimer("5.2)   BlockCrs local apply (tpetra)"));
