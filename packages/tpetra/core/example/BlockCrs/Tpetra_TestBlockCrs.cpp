@@ -511,8 +511,28 @@ int main (int argc, char *argv[])
       // matrix vector multiplication
       {
         for (LO iter=0;iter<repeat;++iter) {
-          TimeMonitor timerBlockCrsApply(*TimeMonitor::getNewTimer("5) BlockCrs Apply"));
-          A_bcrs->apply(*X, *B_bcrs);
+
+          // Create MultiVector
+          RCP<tpetra_multivector_type> X = Teuchos::rcp(new tpetra_multivector_type(A_bcrs->getDomainMap(), nrhs));
+          {
+            TimeMonitor timerMultiVectorFill(*TimeMonitor::getNewTimer("4) MultiVectorFill"));
+
+            auto value = X->getLocalViewDevice(Tpetra::Access::OverwriteAll);
+            auto map = X->getMap()->getLocalMap();
+            Kokkos::parallel_for
+              (value.extent(0), KOKKOS_LAMBDA(const LO i) {
+                const GO gid = map.getGlobalElement(i);
+                for (LO j=0,jend=value.extent(1);j<jend;++j)
+                  value(i, j) = get_multi_vector_entry<value_type>(gid, j);
+              });
+          }
+
+
+
+          {
+            TimeMonitor timerBlockCrsApply(*TimeMonitor::getNewTimer("5) BlockCrs Apply"));
+            A_bcrs->apply(*X, *B_bcrs);
+          }
         }
       }
 
