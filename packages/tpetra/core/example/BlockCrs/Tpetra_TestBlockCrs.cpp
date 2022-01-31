@@ -527,6 +527,9 @@ int main (int argc, char *argv[])
               });
           }
 
+          RCP<tpetra_multivector_type> B_bcrs = Teuchos::rcp(new tpetra_multivector_type(A_bcrs->getRangeMap(),  nrhs));
+
+
 
 
           {
