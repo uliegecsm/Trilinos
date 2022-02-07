@@ -157,5 +157,3 @@ rsync.*
 # pycharm ide
 .idea
 
-# Old KokkosKernels
-packages/kokkos-kernels-old/

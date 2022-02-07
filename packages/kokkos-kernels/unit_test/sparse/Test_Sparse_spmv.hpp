@@ -10,7 +10,6 @@
 
 #include "KokkosKernels_Controls.hpp"
 #include "KokkosKernels_default_types.hpp"
-#include "Cuda/Kokkos_Cuda_Half.hpp"
 
 // #ifndef kokkos_complex_double
 // #define kokkos_complex_double Kokkos::complex<double>
@@ -1067,10 +1066,10 @@ Matrix expand_matrix(std::vector<Coordinate> pattern, const int m, const int k,
   // check rows and columns
   for (const Coordinate &c : pattern) {
     if (c.i >= m) {
-      Kokkos::Impl::throw_runtime_exception("i exceeded matrix rows");
+      KokkosKernels::Impl::throw_runtime_exception("i exceeded matrix rows");
     }
     if (c.j >= k) {
-      Kokkos::Impl::throw_runtime_exception("j exceeded matrix cols");
+      KokkosKernels::Impl::throw_runtime_exception("j exceeded matrix cols");
     }
   }
 
@@ -1146,10 +1145,10 @@ Matrix expand_matrix(std::vector<Coordinate> pattern, const int m, const int k,
   // check rows and columns
   for (const Coordinate &c : pattern) {
     if (c.i >= m) {
-      Kokkos::Impl::throw_runtime_exception("i exceeded matrix rows");
+      KokkosKernels::Impl::throw_runtime_exception("i exceeded matrix rows");
     }
     if (c.j >= k) {
-      Kokkos::Impl::throw_runtime_exception("j exceeded matrix cols");
+      KokkosKernels::Impl::throw_runtime_exception("j exceeded matrix cols");
     }
   }
 
