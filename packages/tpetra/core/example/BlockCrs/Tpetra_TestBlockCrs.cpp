@@ -321,12 +321,12 @@ int main (int argc, char *argv[])
       typedef local_graph_device_type::row_map_type::non_const_type rowptr_view_type;
       typedef typename local_graph_device_type::entries_type colidx_view_type;
 
-      rowptr_view_type rowptr;
-      colidx_view_type colidx;
+      rowptr_view_type bcrs_rowptr;
+      colidx_view_type bcrs_colidx;
       {
         TimeMonitor timerLocalGraphConstruction(*TimeMonitor::getNewTimer("0) LocalGraphConstruction"));
 
-        rowptr = rowptr_view_type("rowptr", num_owned_elements + 1);
+        bcrs_rowptr = rowptr_view_type("rowptr", num_owned_elements + 1);
 
         local_ordinal_range_type owned_range_i, owned_range_j, owned_range_k;
         local_ordinal_range_type remote_range_i, remote_range_j, remote_range_k;
@@ -339,24 +339,24 @@ int main (int argc, char *argv[])
           LocalGraphConstruction local_graph_construction
             (sb, owned_gids,
              remote_range_i, remote_range_j, remote_range_k,
-             rowptr);
+             bcrs_rowptr);
           local_graph_construction.run();
         }
 
         // the last entry of rowptr is the total number of nonzeros in the local graph
         // mirror to host to use the information in constructing colidx
-        auto nnz = Kokkos::subview(rowptr, num_owned_elements);
+        auto nnz = Kokkos::subview(bcrs_rowptr, num_owned_elements);
         const auto nnz_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), nnz);
 
         // allocate colidx
-        colidx = colidx_view_type("colidx", nnz_host());
+        bcrs_colidx = colidx_view_type("colidx", nnz_host());
 
         // fill
         {
           LocalGraphFill local_graph_fill(sb, owned_gids, remote_gids,
                                           owned_range_i, owned_range_j, owned_range_k,
                                           remote_range_i, remote_range_j, remote_range_k,
-                                          rowptr, colidx);
+                                          bcrs_rowptr, bcrs_colidx);
           local_graph_fill.run();
         }
 
@@ -372,11 +372,11 @@ int main (int argc, char *argv[])
       {
         TimeMonitor timerGlobalGraphConstruction(*TimeMonitor::getNewTimer("1) GlobalGraphConstruction"));
         rowptr_view_type rowptr_tpetra = 
-          rowptr_view_type(Kokkos::ViewAllocateWithoutInitializing("rowptr_tpetra"), rowptr.extent(0));
+          rowptr_view_type(Kokkos::ViewAllocateWithoutInitializing("rowptr_tpetra"), bcrs_rowptr.extent(0));
         colidx_view_type colidx_tpetra =
-          colidx_view_type(Kokkos::ViewAllocateWithoutInitializing("colidx_tpetra"), colidx.extent(0));
-        Kokkos::deep_copy(rowptr_tpetra, rowptr);
-        Kokkos::deep_copy(colidx_tpetra, colidx);
+          colidx_view_type(Kokkos::ViewAllocateWithoutInitializing("colidx_tpetra"), bcrs_colidx.extent(0));
+        Kokkos::deep_copy(rowptr_tpetra, bcrs_rowptr);
+        Kokkos::deep_copy(colidx_tpetra, bcrs_colidx);
         bcrs_graph = rcp(new tpetra_crs_graph_type(row_map, col_map, 
                                                    local_graph_device_type(colidx_tpetra, rowptr_tpetra),
                                                    Teuchos::null));
@@ -391,8 +391,8 @@ int main (int argc, char *argv[])
         os << *debugPrefix << "Make BlockCrsMatrix" << endl;
         std::cerr << os.str ();
       }
-      // Create BlockCrsMatrix
-      RCP<tpetra_blockcrs_matrix_type> A_bcrs (new tpetra_blockcrs_matrix_type (*bcrs_graph, blocksize, use_kokkos_kernels));
+
+      //RCP<tpetra_blockcrs_matrix_type> A_bcrs (new tpetra_blockcrs_matrix_type (*bcrs_graph, blocksize, use_kokkos_kernels));
 
       if (debug) {
         std::ostringstream os;
@@ -401,13 +401,23 @@ int main (int argc, char *argv[])
       }
       typedef tpetra_blockcrs_matrix_type::little_block_type block_type;
       Kokkos::View<block_type*, device_type> blocks;
-      {
+
+      typename tpetra_crs_matrix_type::local_matrix_device_type::values_type
+        crs_data_values("crs_data_values", bcrs_colidx.extent(0)*blocksize*blocksize);
+      typename tpetra_blockcrs_matrix_type::local_matrix_device_type::values_type
+        bcrs_data_values("bcrs_data_values", bcrs_colidx.extent(0)*blocksize*blocksize);
+
+      RCP<tpetra_crs_matrix_type> A_crs;
+      RCP<tpetra_blockcrs_matrix_type> A_bcrs;
+
+      if (false) {
+
         TimeMonitor timerLocalBlockCrsFill(*TimeMonitor::getNewTimer("2) LocalBlockCrsFill"));
 
         // Tpetra BlockCrsMatrix only has high level access functions
         // To fill this on device, we need an access to the meta data of blocks
-        const auto rowptr_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), rowptr);
-        const auto colidx_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), colidx);
+        const auto rowptr_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), bcrs_rowptr);
+        const auto colidx_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), bcrs_colidx);
 
         blocks = Kokkos::View<block_type*, device_type>("blocks", rowptr_host(num_owned_elements));
 
@@ -437,12 +447,12 @@ int main (int argc, char *argv[])
         Kokkos::parallel_for
           (Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
            KOKKOS_LAMBDA (const LO row) {
-            const auto beg = rowptr(row);
-            const auto end = rowptr(row+1);
+            const auto beg = bcrs_rowptr(row);
+            const auto end = bcrs_rowptr(row+1);
             typedef typename std::remove_const<decltype (beg) >::type offset_type;
             for (offset_type loc = beg; loc < end; ++loc) {
               const GO gid_row = mesh_gids(row);
-              const GO gid_col = mesh_gids(colidx(loc));
+              const GO gid_col = mesh_gids(bcrs_colidx(loc));
 
               LO i0, j0, k0, i1, j1, k1;
               sb.idx_to_ijk(gid_row, i0, j0, k0);
@@ -460,7 +470,122 @@ int main (int argc, char *argv[])
                                                                   l0, l1);
             }
           });
-      }
+
+      } else {
+
+        // here, we create pointwise row and column maps manually.
+        decltype(mesh_gids) crs_gids("crs_gids", mesh_gids.extent(0)*blocksize);
+        Kokkos::parallel_for
+          (num_owned_and_remote_elements,
+           KOKKOS_LAMBDA(const LO idx) {
+            for (LO l=0;l<blocksize;++l)
+              crs_gids(idx*blocksize+l) = mesh_gids(idx)*blocksize+l;
+          });
+        const auto owned_crs_gids = Kokkos::subview(crs_gids, local_ordinal_range_type(0, num_owned_elements*blocksize));
+
+        RCP<const map_type> row_crs_map (new map_type (TpetraComputeGlobalNumElements,
+                                                       owned_crs_gids, 0, commTest));
+        RCP<const map_type> col_crs_map (new map_type (TpetraComputeGlobalNumElements,
+                                                       crs_gids, 0, commTest));
+
+        rowptr_view_type crs_rowptr = rowptr_view_type("crs_rowptr", num_owned_elements*blocksize+1);
+        colidx_view_type crs_colidx = colidx_view_type("crs_colidx", bcrs_colidx.extent(0)*blocksize*blocksize);
+
+        Kokkos::parallel_for
+          (Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
+           KOKKOS_LAMBDA (const LO &row) {
+
+             const auto bcrs_colidx_begin = bcrs_rowptr(row);
+             const auto bcrs_colidx_end   = bcrs_rowptr(row+1);
+
+             // Calculate rowptr for CRS
+             const auto nnz_per_point_row  = (bcrs_colidx_end - bcrs_colidx_begin)*blocksize;
+             const auto crs_rowptr_begin  = row*blocksize;
+             const auto crs_colidx_begin  = bcrs_colidx_begin*blocksize*blocksize;
+             for (LO i=0;i<(blocksize+1);++i) {
+               crs_rowptr(crs_rowptr_begin+i) = crs_colidx_begin + i*nnz_per_point_row;
+             }
+
+             // Calcuate bcrs_data_values
+             GO data_indx = crs_colidx_begin;
+             typedef typename std::remove_const<decltype (bcrs_colidx_begin) >::type offset_type;
+             for (offset_type block = bcrs_colidx_begin; block < bcrs_colidx_end; ++block) {
+               const GO gid_row = mesh_gids(row);
+               const GO gid_col = mesh_gids(bcrs_colidx(block));
+
+               LO i0, j0, k0, i1, j1, k1;
+               sb.idx_to_ijk(gid_row, i0, j0, k0);
+               sb.idx_to_ijk(gid_col, i1, j1, k1);
+
+               const LO diff_i = i0 - i1;
+               const LO diff_j = j0 - j1;
+               const LO diff_k = j0 - k1;
+
+               for (LO l0=0;l0<blocksize;++l0) {
+                 for (LO l1=0;l1<blocksize;++l1) {
+                   bcrs_data_values(data_indx) = get_block_crs_entry<value_type>(i0, j0, k0,
+                                                                                      diff_i, diff_j, diff_k,
+                                                                                      l0, l1);
+                   std::cout << bcrs_data_values(data_indx) << std::endl;
+                   ++data_indx;
+                 }
+               }
+             }
+
+             // Calcuate crs_data_values
+             data_indx = crs_colidx_begin;
+             // loop over the rows in a block
+             for (LO l0=0;l0<blocksize;++l0) {
+               // loop over the block row
+               typedef typename std::remove_const<decltype (bcrs_colidx_begin) >::type offset_type;
+               for (offset_type block = bcrs_colidx_begin; block < bcrs_colidx_end; ++block) {
+                 // loop over the cols in a block
+                 const GO offset = bcrs_colidx(block)*blocksize;
+                 for (LO l1=0;l1<blocksize;++l1) {
+                   crs_colidx(data_indx) = offset+l1;
+
+
+                   LO bcrs_indx = block*blocksize*blocksize + l0*blocksize + l1;
+                   std::cout << "INDICES: crs -> bcrs: " << data_indx << " -> " << bcrs_indx << std::endl;
+                   crs_data_values(data_indx) = bcrs_data_values(bcrs_indx);
+                   ++data_indx;
+                 }
+               }
+             }
+          });
+
+          {
+            typename tpetra_crs_matrix_type::local_matrix_device_type
+              local_matrix("local_crs_matrix",
+                           num_owned_and_remote_elements*blocksize,
+                           crs_data_values/*crs_values*/,
+                           local_graph_device_type(crs_colidx, crs_rowptr));
+
+            A_crs = rcp(new tpetra_crs_matrix_type(row_crs_map,
+                                                   col_crs_map,
+                                                   local_matrix,
+                                                   Teuchos::null));
+          }
+
+          {
+            typename tpetra_blockcrs_matrix_type::local_matrix_device_type
+              local_matrix("local_blockcrs_matrix",
+                           num_owned_and_remote_elements,
+                           bcrs_data_values/*crs_values*/,
+                           bcrs_graph->getLocalGraphDevice(),
+                           blocksize);
+
+            A_bcrs = rcp(new tpetra_blockcrs_matrix_type(*bcrs_graph, local_matrix, blocksize, use_kokkos_kernels));
+          }
+
+          std::cout << "Crs: " << A_crs->getGlobalNumRows() << " x " << A_crs->getGlobalNumCols() << std::endl;
+
+
+          std::cout << "BCrs: " << A_bcrs->getGlobalNumRows() << " x " << A_bcrs->getGlobalNumCols() << std::endl;
+
+        }
+
+
 
       {
         TimeMonitor timerBlockCrsFillComplete(*TimeMonitor::getNewTimer("3) BlockCrsMatrix FillComplete - currently do nothing"));
@@ -545,86 +670,89 @@ int main (int argc, char *argv[])
         std::cerr << os.str ();
       }
       // direct conversion: block crs -> point crs
-      RCP<tpetra_crs_matrix_type> A_crs;
-      {
-        TimeMonitor timerConvertBlockCrsToPointCrs(*TimeMonitor::getNewTimer("6) Conversion from BlockCrs to PointCrs"));
+//      RCP<tpetra_crs_matrix_type> A_crs;
+//      {
+//        TimeMonitor timerConvertBlockCrsToPointCrs(*TimeMonitor::getNewTimer("6) Conversion from BlockCrs to PointCrs"));
 
-        // construct row map and column map for a point crs matrix
-        // point-wise row map can be obtained from A_bcrs->getDomainMap().
-        // A constructor exist for crs matrix with a local matrix and a row map.
-        // see, Tpetra_CrsMatrix_decl.hpp, line 504
-        //     CrsMatrix (const local_matrix_device_type& lclMatrix,
-        //                const Teuchos::RCP<const map_type>& rowMap,
-        //                const Teuchos::RCP<const map_type>& colMap = Teuchos::null,
-        //                const Teuchos::RCP<const map_type>& domainMap = Teuchos::null,
-        //                const Teuchos::RCP<const map_type>& rangeMap = Teuchos::null,
-        //                const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null);
-        // However, this does not work with the following use case.
-        //   A_crs = rcp(new tpetra_crs_matrix_type(local_matrix, A_bcrs->getDomainMap()));
+//        // construct row map and column map for a point crs matrix
+//        // point-wise row map can be obtained from A_bcrs->getDomainMap().
+//        // A constructor exist for crs matrix with a local matrix and a row map.
+//        // see, Tpetra_CrsMatrix_decl.hpp, line 504
+//        //     CrsMatrix (const local_matrix_device_type& lclMatrix,
+//        //                const Teuchos::RCP<const map_type>& rowMap,
+//        //                const Teuchos::RCP<const map_type>& colMap = Teuchos::null,
+//        //                const Teuchos::RCP<const map_type>& domainMap = Teuchos::null,
+//        //                const Teuchos::RCP<const map_type>& rangeMap = Teuchos::null,
+//        //                const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null);
+//        // However, this does not work with the following use case.
+//        //   A_crs = rcp(new tpetra_crs_matrix_type(local_matrix, A_bcrs->getDomainMap()));
 
-        // here, we create pointwise row and column maps manually.
-        decltype(mesh_gids) crs_gids("crs_gids", mesh_gids.extent(0)*blocksize);
-        Kokkos::parallel_for
-          (num_owned_and_remote_elements,
-           KOKKOS_LAMBDA(const LO idx) {
-            for (LO l=0;l<blocksize;++l)
-              crs_gids(idx*blocksize+l) = mesh_gids(idx)*blocksize+l;
-          });
-        const auto owned_crs_gids = Kokkos::subview(crs_gids, local_ordinal_range_type(0, num_owned_elements*blocksize));
+//        // here, we create pointwise row and column maps manually.
+//        decltype(mesh_gids) crs_gids("crs_gids", mesh_gids.extent(0)*blocksize);
+//        Kokkos::parallel_for
+//          (num_owned_and_remote_elements,
+//           KOKKOS_LAMBDA(const LO idx) {
+//            for (LO l=0;l<blocksize;++l)
+//              crs_gids(idx*blocksize+l) = mesh_gids(idx)*blocksize+l;
+//          });
+//        const auto owned_crs_gids = Kokkos::subview(crs_gids, local_ordinal_range_type(0, num_owned_elements*blocksize));
 
-        RCP<const map_type> row_crs_map (new map_type (TpetraComputeGlobalNumElements,
-                                                       owned_crs_gids, 0, commTest));
-        RCP<const map_type> col_crs_map (new map_type (TpetraComputeGlobalNumElements,
-                                                       crs_gids, 0, commTest));
+//        RCP<const map_type> row_crs_map (new map_type (TpetraComputeGlobalNumElements,
+//                                                       owned_crs_gids, 0, commTest));
+//        RCP<const map_type> col_crs_map (new map_type (TpetraComputeGlobalNumElements,
+//                                                       crs_gids, 0, commTest));
 
-        rowptr_view_type crs_rowptr = rowptr_view_type("crs_rowptr", num_owned_elements*blocksize+1);
-        colidx_view_type crs_colidx = colidx_view_type("crs_colidx", colidx.extent(0)*blocksize*blocksize);
-        typename tpetra_crs_matrix_type::local_matrix_device_type::values_type
-          crs_values("crs_values", colidx.extent(0)*blocksize*blocksize);
+//        rowptr_view_type crs_rowptr = rowptr_view_type("crs_rowptr", num_owned_elements*blocksize+1);
+//        colidx_view_type crs_colidx = colidx_view_type("crs_colidx", bcrs_colidx.extent(0)*blocksize*blocksize);
+//        typename tpetra_crs_matrix_type::local_matrix_device_type::values_type
+//          crs_values("crs_values", bcrs_colidx.extent(0)*blocksize*blocksize);
 
-        Kokkos::parallel_for
-          (Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
-           KOKKOS_LAMBDA (const LO &idx) {
-            const GO nnz_per_block_row = rowptr(idx+1)-rowptr(idx); // FIXME could be LO if no duplicates
-            const GO nnz_per_point_row = nnz_per_block_row*blocksize;
-            const GO crs_rowptr_begin  = idx*blocksize;
-            const GO crs_colidx_begin  = rowptr(idx)*blocksize*blocksize;
+//        Kokkos::parallel_for
+//          (Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
+//           KOKKOS_LAMBDA (const LO &idx) {
+//            const GO nnz_per_block_row = bcrs_rowptr(idx+1)-bcrs_rowptr(idx); // FIXME could be LO if no duplicates
+//            const GO nnz_per_point_row = nnz_per_block_row*blocksize;
+//            const GO crs_rowptr_begin  = idx*blocksize;
+//            const GO crs_colidx_begin  = bcrs_rowptr(idx)*blocksize*blocksize;
 
-            for (LO i=0;i<(blocksize+1);++i) {
-              crs_rowptr(crs_rowptr_begin+i) = crs_colidx_begin + i*nnz_per_point_row;
-            }
+//            for (LO i=0;i<(blocksize+1);++i) {
+//              crs_rowptr(crs_rowptr_begin+i) = crs_colidx_begin + i*nnz_per_point_row;
+//            }
 
-            GO loc = crs_colidx_begin;
-            // loop over the rows in a block
-            for (LO l0=0;l0<blocksize;++l0) {
-              // loop over the block row
-              typedef typename std::decay<decltype (rowptr(idx)) >::type offset_type;
+//            GO loc = crs_colidx_begin;
+//            // loop over the rows in a block
+//            for (LO l0=0;l0<blocksize;++l0) {
+//              // loop over the block row
+//              typedef typename std::decay<decltype (bcrs_rowptr(idx)) >::type offset_type;
 
-              for (offset_type jj = rowptr(idx); jj < rowptr(idx+1); ++jj) {
-                const auto block = blocks(jj);
-                // loop over the cols in a block
-                const GO offset = colidx(jj)*blocksize;
-                for (LO l1=0;l1<blocksize;++l1) {
-                  crs_colidx(loc) = offset+l1;
-                  crs_values(loc) = block(l0,l1);
-                  ++loc;
-                }
-              }
-            }
-          });
+//              for (offset_type jj = bcrs_rowptr(idx); jj < bcrs_rowptr(idx+1); ++jj) {
+//                const auto block = blocks(jj);
+//                // loop over the cols in a block
+//                const GO offset = bcrs_colidx(jj)*blocksize;
+//                for (LO l1=0;l1<blocksize;++l1) {
+//                  crs_colidx(loc) = offset+l1;
+//                  crs_values(loc) = block(l0,l1);
+//                  ++loc;
+//                }
+//              }
+//            }
+//          });
 
-        typename tpetra_crs_matrix_type::local_matrix_device_type
-          local_matrix("local_crs_matrix",
-                       num_owned_and_remote_elements*blocksize,
-                       crs_values,
-                       local_graph_device_type(crs_colidx, crs_rowptr));
+//        typename tpetra_crs_matrix_type::local_matrix_device_type
+//          local_matrix("local_crs_matrix",
+//                       num_owned_and_remote_elements*blocksize,
+//                       crs_data_values/*crs_values*/,
+//                       local_graph_device_type(crs_colidx, crs_rowptr));
 
-        A_crs = rcp(new tpetra_crs_matrix_type(row_crs_map,
-                                               col_crs_map,
-                                               local_matrix,
-                                               Teuchos::null));
+//        A_crs = rcp(new tpetra_crs_matrix_type(row_crs_map,
+//                                               col_crs_map,
+//                                               local_matrix,
+//                                               Teuchos::null));
 
-      } // end conversion timer
+//        std::cout << "Crs: " << A_crs->getGlobalNumRows() << " x " << A_crs->getGlobalNumCols() << std::endl;
+
+
+//      } // end conversion timer
 
       if (verbose) {
         A_crs->describe(*out, Teuchos::VERB_EXTREME);
