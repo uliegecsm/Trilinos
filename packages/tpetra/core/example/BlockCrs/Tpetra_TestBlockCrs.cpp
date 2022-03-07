@@ -435,7 +435,8 @@ int main (int argc, char *argv[])
         Kokkos::deep_copy(blocks, blocks_host);
 
         Kokkos::parallel_for
-          (Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
+          ("Old Block Fill",
+           Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
            KOKKOS_LAMBDA (const LO row) {
             const auto beg = rowptr(row);
             const auto end = rowptr(row+1);
@@ -470,7 +471,8 @@ int main (int argc, char *argv[])
         TimeMonitor timerLocalBlockCrsFill(*TimeMonitor::getNewTimer("2) LocalBlockCrsFillNew"));
 
         Kokkos::parallel_for
-          (Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
+          ("BlockFill",
+           Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
            KOKKOS_LAMBDA (const LO row) {
 
             GO indx = rowptr(row)*blocksize*blocksize;
@@ -595,7 +597,7 @@ int main (int argc, char *argv[])
         // here, we create pointwise row and column maps manually.
         decltype(mesh_gids) crs_gids("crs_gids", mesh_gids.extent(0)*blocksize);
         Kokkos::parallel_for
-          (num_owned_and_remote_elements,
+          ("store gids", num_owned_and_remote_elements,
            KOKKOS_LAMBDA(const LO idx) {
             for (LO l=0;l<blocksize;++l)
               crs_gids(idx*blocksize+l) = mesh_gids(idx)*blocksize+l;
