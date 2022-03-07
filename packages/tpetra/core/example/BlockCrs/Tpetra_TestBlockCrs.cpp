@@ -613,7 +613,8 @@ int main (int argc, char *argv[])
         colidx_view_type crs_colidx = colidx_view_type("crs_colidx", colidx.extent(0)*blocksize*blocksize);
 
         Kokkos::parallel_for
-          (Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
+          ("Fill CRS"
+           Kokkos::RangePolicy<exec_space, LO> (0, num_owned_elements),
            KOKKOS_LAMBDA (const LO &idx) {
             const GO nnz_per_block_row = rowptr(idx+1)-rowptr(idx); // FIXME could be LO if no duplicates
             const GO nnz_per_point_row = nnz_per_block_row*blocksize;
