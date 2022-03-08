@@ -52,7 +52,7 @@
 #define DGEQP3_F77  F77_BLAS_MANGLE(dgeqp3,DGEQP3)
 extern "C" {
 void DGEQP3_F77(const int*, const int*, double*, const int*, int*,
-                double*, double*, const int*, int*);
+                double*, double*, const int*, int*) noexcept;
 }
 
 #include "Stokhos_ConfigDefs.h"
