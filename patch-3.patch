@@ -1,0 +1,31 @@
+From 84ca34feba325c202d773514ebfe7c946579186c Mon Sep 17 00:00:00 2001
+From: Maarten Arnst <maarten.arnst@uliege.be>
+Date: Tue, 8 Mar 2022 18:34:56 +0100
+Subject: [PATCH] Patch avoids compilation error when compiling
+ packages/stokhos/src/kokkos/Cuda/Stokhos_Cuda_CrsMatrix.hpp with Cuda 11.6. 
+ Functions in this file make use of cusparse functions that are no longer
+ available in this Cuda toolkit version.   This patch is too widely scoped
+ because it disables cusparse everywhere in stokhos.  A better solution might
+ be to update the functions in the stokhos file so as to use the latest
+ cusparse functions.
+
+---
+ packages/stokhos/cmake/Stokhos_config.h.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/stokhos/cmake/Stokhos_config.h.in b/packages/stokhos/cmake/Stokhos_config.h.in
+index 7459bb62790..6b3de05eaf3 100644
+--- a/packages/stokhos/cmake/Stokhos_config.h.in
++++ b/packages/stokhos/cmake/Stokhos_config.h.in
+@@ -58,7 +58,7 @@
+ #cmakedefine HAVE_STOKHOS_THRUST
+ 
+ /* Define if Thrust is enabled */
+-#cmakedefine HAVE_STOKHOS_CUSPARSE
++//#cmakedefine HAVE_STOKHOS_CUSPARSE
+ 
+ /* Define if Clp is enabled */
+ #cmakedefine HAVE_STOKHOS_CLP
+-- 
+2.25.1
+
