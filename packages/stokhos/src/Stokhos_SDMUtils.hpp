@@ -50,19 +50,9 @@
 #include <ostream>
 
 #define DGEQP3_F77  F77_BLAS_MANGLE(dgeqp3,DGEQP3)
-
-#define NOTHROW
-#if defined(INTEL_MKL)
-    #include "mkl_version.h"
-        #if __INTEL_MKL__ >= 2021
-            #undef NOTHROW
-            #define NOTHROW noexcept
-        #endif
-#endif
-
 extern "C" {
 void DGEQP3_F77(const int*, const int*, double*, const int*, int*,
-                double*, double*, const int*, int*) NOTHROW;
+                double*, double*, const int*, int*);
 }
 
 #include "Stokhos_ConfigDefs.h"
