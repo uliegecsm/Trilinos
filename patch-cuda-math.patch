@@ -1,0 +1,31 @@
+From 63fac3fa3cdd2e920651d4f3d9911da7feac930e Mon Sep 17 00:00:00 2001
+From: Maarten Arnst <maarten.arnst@uliege.be>
+Date: Thu, 17 Mar 2022 09:39:30 +0100
+Subject: [PATCH] Patch avoids many warnings about inclusion of deprecated hpp
+ file when compiling with Cuda >= 10.0.
+
+---
+ .../src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp      | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/packages/stokhos/src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp b/packages/stokhos/src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp
+index 7773622bcb2..4f620753d40 100644
+--- a/packages/stokhos/src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp
++++ b/packages/stokhos/src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp
+@@ -43,7 +43,12 @@
+ #include <ostream>      // for std::ostream
+ 
+ #ifdef __CUDACC__
+-#include <math_functions.h>
++    #include <cuda_runtime_api.h>
++    // including math functions via math_functions.h is deprecated in cuda version >= 10.0
++    // the deprecation warning indicates to use cuda_runtime_api.h instead
++    #if CUDART_VERSION < 10000
++        #include <math_functions.h>
++    #endif
+ #endif
+ 
+ /*
+-- 
+2.25.1
+
