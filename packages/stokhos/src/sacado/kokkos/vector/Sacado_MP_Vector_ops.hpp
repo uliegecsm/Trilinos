@@ -43,7 +43,7 @@
 #include <ostream>      // for std::ostream
 
 #ifdef __CUDACC__
-#include <cuda_runtime_api.h>
+#include <math_functions.h>
 #endif
 
 /*
