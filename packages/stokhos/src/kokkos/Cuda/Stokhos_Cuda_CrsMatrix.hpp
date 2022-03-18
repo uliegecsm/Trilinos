@@ -58,6 +58,8 @@
 #include "Stokhos_Multiply.hpp"
 #include "Stokhos_CrsMatrix.hpp"
 
+#include <cuda_runtime.h>
+#if CUDART_VERSION < 11000 
 namespace Stokhos {
 
 class CudaSparseSingleton {
@@ -733,6 +735,8 @@ public:
 //----------------------------------------------------------------------------
 
 } // namespace Stokhos
+
+#endif
 
 #endif /* #ifdef HAVE_STOKHOS_CUSPARSE */
 

@@ -39,10 +39,12 @@
 // ***********************************************************************
 // @HEADER
 
+/*
 TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL( Kokkos_SG_SpMv, CrsMatrixFree, Scalar, Device ) {
   typedef Stokhos::DefaultMultiply SparseMatOps;
   success = test_crs_matrix_free<Scalar,Device,SparseMatOps>(setup, out);
 }
+*/
 
 TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL( Kokkos_SG_SpMv, CrsMatrixFreeView, Scalar, Device ) {
   typedef Stokhos::DefaultMultiply SparseMatOps;
@@ -138,7 +140,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL( Kokkos_SG_SpMv, LexoBlockTensor, Scalar, Devi
 // ETP 5/12/16:  LinearProductTensor tests are failing with Intel compiler too.
 
 #define UNIT_TEST_GROUP_SCALAR_DEVICE( SCALAR, DEVICE ) \
-  TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFree, SCALAR, DEVICE ) \
+  /*TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFree, SCALAR, DEVICE ) */ \
   TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFreeView, SCALAR, DEVICE ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFreeKokkos, SCALAR, DEVICE ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFreeSingleCol, SCALAR, DEVICE ) \
