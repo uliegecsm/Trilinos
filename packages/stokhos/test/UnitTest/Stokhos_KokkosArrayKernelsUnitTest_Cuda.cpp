@@ -69,7 +69,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, TiledCrsProductTensor, SCA
 #endif
 
 #define UNIT_TEST_GROUP_SCALAR_CUDA( SCALAR ) \
-  TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFree, SCALAR, Cuda ) \
+  /* TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFree, SCALAR, Cuda ) */ \
   TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFreeView, SCALAR, Cuda ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFreeKokkos, SCALAR, Cuda ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_2_INSTANT( Kokkos_SG_SpMv, CrsMatrixFreeSingleCol, SCALAR, Cuda ) \
