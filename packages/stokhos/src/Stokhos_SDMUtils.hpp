@@ -55,16 +55,16 @@ extern "C" {
 #if defined(HAVE_STOKHOS_MKL)
     #include "mkl_version.h"
     #if __INTEL_MKL__ >= 2021
-	void DGEQP3_F77(const int*, const int*, double*, const int*, int*,
-                double*, double*, const int*, int*) noexcept;
+        #define MKL_NO_EXCEPT noexcept
     #else
-	void DGEQP3_F77(const int*, const int*, double*, const int*, int*,
-            double*, double*, const int*, int*);
+        #define MKL_NO_EXCEPT
     #endif
-#else 
-    void DGEQP3_F77(const int*, const int*, double*, const int*, int*,
-            double*, double*, const int*, int*);
+#else
+    #define MKL_NO_EXCEPT
 #endif
+
+void DGEQP3_F77(const int*, const int*, double*, const int*, int*,
+            double*, double*, const int*, int*) MKL_NO_EXCEPT;
 }
 
 #include "Stokhos_ConfigDefs.h"

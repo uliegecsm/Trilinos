@@ -1,13 +1,12 @@
-From 84ca34feba325c202d773514ebfe7c946579186c Mon Sep 17 00:00:00 2001
+From 2961eae9585755f85e886057f77254d23f772329 Mon Sep 17 00:00:00 2001
 From: Maarten Arnst <maarten.arnst@uliege.be>
-Date: Tue, 8 Mar 2022 18:34:56 +0100
-Subject: [PATCH] Patch avoids compilation error when compiling
- packages/stokhos/src/kokkos/Cuda/Stokhos_Cuda_CrsMatrix.hpp with Cuda 11.6. 
- Functions in this file make use of cusparse functions that are no longer
- available in this Cuda toolkit version.   This patch is too widely scoped
- because it disables cusparse everywhere in stokhos.  A better solution might
- be to update the functions in the stokhos file so as to use the latest
- cusparse functions.
+Date: Fri, 18 Mar 2022 15:44:46 +0100
+Subject: [PATCH] Patch disables the use of cusparse in stokhos.  To avoid an
+ error because cusparse_Scrsmv and cusparse_Dcsrmv used in stokhos are
+ deprecated in cuda >=11.0.  This patch should be replaced with a patch that
+ replaces the calls of cusparse_Scrsmv and cusparse_Dcsrmv in
+ packages/stokhos/src/kokkos/Cuda/Stokhos_Cuda_CrsMatrix.hpp with calls of
+ cusparse_SPMV.
 
 ---
  packages/stokhos/cmake/Stokhos_config.h.in | 2 +-
