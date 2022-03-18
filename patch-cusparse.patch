@@ -1,0 +1,30 @@
+From 2961eae9585755f85e886057f77254d23f772329 Mon Sep 17 00:00:00 2001
+From: Maarten Arnst <maarten.arnst@uliege.be>
+Date: Fri, 18 Mar 2022 15:44:46 +0100
+Subject: [PATCH] Patch disables the use of cusparse in stokhos.  To avoid an
+ error because cusparse_Scrsmv and cusparse_Dcsrmv used in stokhos are
+ deprecated in cuda >=11.0.  This patch should be replaced with a patch that
+ replaces the calls of cusparse_Scrsmv and cusparse_Dcsrmv in
+ packages/stokhos/src/kokkos/Cuda/Stokhos_Cuda_CrsMatrix.hpp with calls of
+ cusparse_SPMV.
+
+---
+ packages/stokhos/cmake/Stokhos_config.h.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/stokhos/cmake/Stokhos_config.h.in b/packages/stokhos/cmake/Stokhos_config.h.in
+index 7459bb62790..6b3de05eaf3 100644
+--- a/packages/stokhos/cmake/Stokhos_config.h.in
++++ b/packages/stokhos/cmake/Stokhos_config.h.in
+@@ -58,7 +58,7 @@
+ #cmakedefine HAVE_STOKHOS_THRUST
+ 
+ /* Define if Thrust is enabled */
+-#cmakedefine HAVE_STOKHOS_CUSPARSE
++//#cmakedefine HAVE_STOKHOS_CUSPARSE
+ 
+ /* Define if Clp is enabled */
+ #cmakedefine HAVE_STOKHOS_CLP
+-- 
+2.25.1
+
