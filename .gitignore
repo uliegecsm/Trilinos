@@ -156,3 +156,11 @@ rsync.*
 
 # pycharm ide
 .idea
+
+# costmo
+CMakePresets.json
+CMakeUserPresets.json
+build-with-GNU-OpenMP
+build-with-GNU-OpenMP-Cuda
+
+
