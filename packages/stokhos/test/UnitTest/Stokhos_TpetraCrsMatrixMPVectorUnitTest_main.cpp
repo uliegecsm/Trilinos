@@ -48,23 +48,24 @@
 #include "Kokkos_Core.hpp"
 #include "KokkosCompat_ClassicNodeAPI_Wrapper.hpp"
 
-// Instantiate tests for serial node
-typedef Kokkos::Compat::KokkosDeviceWrapperNode<Kokkos::Serial> SerialWrapperNode;
-CRSMATRIX_MP_VECTOR_TESTS_N( SerialWrapperNode )
+// To be merged with a common test base.
 
-int main( int argc, char* argv[] ) {
+int main( int argc, char* argv[] )
+{
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
 
+  // Why ?
   Kokkos::global_sacado_mp_vector_size = VectorSize;
 
-  // Initialize serial
-  Kokkos::initialize();
+  // Initialize Kokkos
+  Kokkos::initialize(argc,argv);
+  Kokkos::print_configuration(std::cout);
 
   // Run tests
   Teuchos::UnitTestRepository::setGloballyReduceTestResult(true);
   int ret = Teuchos::UnitTestRepository::runUnitTestsFromMain(argc, argv);
 
-  // Finish up
+  // Finilize Kokkos
   Kokkos::finalize();
 
   return ret;

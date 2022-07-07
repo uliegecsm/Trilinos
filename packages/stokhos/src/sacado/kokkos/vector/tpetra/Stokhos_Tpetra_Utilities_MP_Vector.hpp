@@ -269,7 +269,7 @@ namespace Stokhos {
     Vector& vec = const_cast<Vector&>(vec_const);
 
     // Get data
-    ArrayRCP<Scalar> vec_vals = vec.get1dViewNonConst();
+    auto vec_vals = vec.getLocalViewDevice(Tpetra::Access::ReadOnly);
     const size_t vec_size = vec_vals.size();
 
     // Create view of data
@@ -329,7 +329,7 @@ namespace Stokhos {
     const LocalOrdinal mp_size = Storage::static_size;
 
     // Get data
-    ArrayRCP<Scalar> vec_vals = vec.get1dViewNonConst();
+    auto vec_vals = vec.getLocalViewDevice(Tpetra::Access::ReadOnly);
     const size_t vec_size = vec_vals.size();
 
     // Create view of data

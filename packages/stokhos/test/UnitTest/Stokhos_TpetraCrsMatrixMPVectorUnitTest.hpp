@@ -978,13 +978,15 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(
   RCP<Flat_Tpetra_CrsMatrix> flat_matrix =
     Stokhos::create_flat_matrix(*matrix, flat_graph, VectorSize);
 
-  // Multiply with flattened matix
+  // Multiply with flattened matrix
   RCP<Tpetra_Vector> y2 = Tpetra::createVector<Scalar>(map);
-  RCP<Flat_Tpetra_Vector> flat_x =
-    Stokhos::create_flat_vector_view(*x, flat_x_map);
-  RCP<Flat_Tpetra_Vector> flat_y =
-    Stokhos::create_flat_vector_view(*y2, flat_y_map);
-  flat_matrix->apply(*flat_x, *flat_y);
+  {
+    RCP<Flat_Tpetra_Vector> flat_x =
+      Stokhos::create_flat_vector_view(*x, flat_x_map);
+    RCP<Flat_Tpetra_Vector> flat_y =
+      Stokhos::create_flat_vector_view(*y2, flat_y_map);
+    flat_matrix->apply(*flat_x, *flat_y);
+  }
 
   // flat_y->describe(*(Teuchos::fancyOStream(rcp(&std::cout,false))),
   //                  Teuchos::VERB_EXTREME);
@@ -2516,3 +2518,13 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(
   // using default_global_ordinal_type = ::Tpetra::Map<>::global_ordinal_type;
   // using default_local_ordinal_type = ::Tpetra::Map<>::local_ordinal_type;
   // CRSMATRIX_MP_VECTOR_TESTS_SLGN(DS, default_global_ordinal_type, default_local_ordinal_type, N)
+
+// Instantiate tests for the required node type defined by STOKHOS_TEST_SPACE
+#ifndef STOKHOS_TEST_SPACE
+    #error "STOKHOS_TEST_SPACE must be defined."
+#endif
+
+#define GENERATE_WRAPPER_NODE_NAME WrapperNode##STOKHOS_TEST_SPACE
+
+typedef Kokkos::Compat::KokkosDeviceWrapperNode<Kokkos::STOKHOS_TEST_SPACE> GENERATE_WRAPPER_NODE_NAME;
+CRSMATRIX_MP_VECTOR_TESTS_N( GENERATE_WRAPPER_NODE_NAME )
