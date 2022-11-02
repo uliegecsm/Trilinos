@@ -541,7 +541,7 @@ private:
 //
 
 template<class KeyType, class ValueType, class DeviceType>
-FixedHashTable<KeyType, ValueType, DeviceType>::
+KOKKOS_FUNCTION FixedHashTable<KeyType, ValueType, DeviceType>::
 FixedHashTable () :
   minKey_ (::Kokkos::Details::ArithTraits<KeyType>::max ()),
   maxKey_ (::Kokkos::Details::ArithTraits<KeyType>::is_integer ?

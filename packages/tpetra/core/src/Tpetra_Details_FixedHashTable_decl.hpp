@@ -127,7 +127,7 @@ public:
   typedef Kokkos::View<const KeyType*, Kokkos::LayoutLeft, device_type> keys_type;
 
   //! Default constructor; makes an empty table.
-  FixedHashTable ();
+  KOKKOS_FUNCTION FixedHashTable ();
 
   /// \brief Constructor for arbitrary keys and contiguous values
   ///   starting with zero.
