@@ -51,6 +51,7 @@
 #include "Teuchos_FancyOStream.hpp"
 #include "Teuchos_VerbosityLevel.hpp"
 #include "Kokkos_Core.hpp"
+#include "Kokkos_ArithTraits.hpp"
 
 namespace Tpetra {
 namespace Details {
@@ -127,7 +128,25 @@ public:
   typedef Kokkos::View<const KeyType*, Kokkos::LayoutLeft, device_type> keys_type;
 
   //! Default constructor; makes an empty table.
-  KOKKOS_FUNCTION FixedHashTable ();
+  KOKKOS_FUNCTION FixedHashTable () :
+    minKey_ (::Kokkos::Details::ArithTraits<KeyType>::max ()),
+    maxKey_ (::Kokkos::Details::ArithTraits<KeyType>::is_integer ?
+             ::Kokkos::Details::ArithTraits<KeyType>::min () :
+             -::Kokkos::Details::ArithTraits<KeyType>::max ()),
+    minVal_ (::Kokkos::Details::ArithTraits<ValueType>::max ()),
+    maxVal_ (::Kokkos::Details::ArithTraits<ValueType>::is_integer ?
+             ::Kokkos::Details::ArithTraits<ValueType>::min () :
+             -::Kokkos::Details::ArithTraits<ValueType>::max ()),
+    firstContigKey_ (::Kokkos::Details::ArithTraits<KeyType>::max ()),
+    lastContigKey_ (::Kokkos::Details::ArithTraits<KeyType>::is_integer ?
+                    ::Kokkos::Details::ArithTraits<KeyType>::min () :
+                    -::Kokkos::Details::ArithTraits<KeyType>::max ()),
+    contiguousValues_ (true), // trivially
+    checkedForDuplicateKeys_ (true), // it's an empty table; no need to check
+    hasDuplicateKeys_ (false)
+  {
+  }
+
 
   /// \brief Constructor for arbitrary keys and contiguous values
   ///   starting with zero.

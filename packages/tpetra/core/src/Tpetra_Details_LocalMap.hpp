@@ -95,7 +95,7 @@ public:
 #endif
 
   //! Default constructor.
-  LocalMap() = default;
+  KOKKOS_DEFAULTED_FUNCTION LocalMap() = default;
 
   LocalMap (const ::Tpetra::Details::FixedHashTable<GlobalOrdinal, LocalOrdinal, no_uvm_device_type>& glMap,
             const ::Kokkos::View<const GlobalOrdinal*, ::Kokkos::LayoutLeft, no_uvm_device_type>& lgMap,

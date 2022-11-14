@@ -49,7 +49,6 @@
 #ifdef TPETRA_USE_MURMUR_HASH
 #  include "Kokkos_Functional.hpp" // hash function used by Kokkos::UnorderedMap
 #endif // TPETRA_USE_MURMUR_HASH
-#include "Kokkos_ArithTraits.hpp"
 #include "Teuchos_TypeNameTraits.hpp"
 #include "Tpetra_Details_Behavior.hpp"
 #include <type_traits>
@@ -539,27 +538,6 @@ private:
 //
 // Here begins the actual implementation of FixedHashTable.
 //
-
-template<class KeyType, class ValueType, class DeviceType>
-KOKKOS_FUNCTION FixedHashTable<KeyType, ValueType, DeviceType>::
-FixedHashTable () :
-  minKey_ (::Kokkos::Details::ArithTraits<KeyType>::max ()),
-  maxKey_ (::Kokkos::Details::ArithTraits<KeyType>::is_integer ?
-           ::Kokkos::Details::ArithTraits<KeyType>::min () :
-           -::Kokkos::Details::ArithTraits<KeyType>::max ()),
-  minVal_ (::Kokkos::Details::ArithTraits<ValueType>::max ()),
-  maxVal_ (::Kokkos::Details::ArithTraits<ValueType>::is_integer ?
-           ::Kokkos::Details::ArithTraits<ValueType>::min () :
-           -::Kokkos::Details::ArithTraits<ValueType>::max ()),
-  firstContigKey_ (::Kokkos::Details::ArithTraits<KeyType>::max ()),
-  lastContigKey_ (::Kokkos::Details::ArithTraits<KeyType>::is_integer ?
-                  ::Kokkos::Details::ArithTraits<KeyType>::min () :
-                  -::Kokkos::Details::ArithTraits<KeyType>::max ()),
-  contiguousValues_ (true), // trivially
-  checkedForDuplicateKeys_ (true), // it's an empty table; no need to check
-  hasDuplicateKeys_ (false)
-{
-}
 
 template<class KeyType, class ValueType, class DeviceType>
 FixedHashTable<KeyType, ValueType, DeviceType>::
