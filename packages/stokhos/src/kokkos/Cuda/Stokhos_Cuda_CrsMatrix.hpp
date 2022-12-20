@@ -63,6 +63,11 @@
 // product correct results).
 #define USE_NEW_SPMV (CUSPARSE_VERSION >= 11000)
 
+#if CUDA_VERSION >= 12000
+    #define CUSPARSE_MM_ALG_DEFAULT CUSPARSE_SPMM_ALG_DEFAULT
+    #define CUSPARSE_MV_ALG_DEFAULT CUSPARSE_SPMV_ALG_DEFAULT
+#endif
+
 namespace Stokhos {
 
 class CudaSparseSingleton {
