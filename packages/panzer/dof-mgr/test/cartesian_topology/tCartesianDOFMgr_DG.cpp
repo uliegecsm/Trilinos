@@ -44,7 +44,7 @@
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_RCP.hpp>
 #include <Teuchos_TimeMonitor.hpp>
-#include <Teuchos_DefaultMpiComm.hpp>
+#include <Teuchos_DefaultComm.hpp>
 #include <Teuchos_CommHelpers.hpp>
 
 #include "Kokkos_Core.hpp"
@@ -100,9 +100,11 @@ std::string getElementBlock(const Triplet & element,
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DG, basic)
 {
-  Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);    
-  int np = comm.getSize();
-  int rank = comm.getRank();
+  using DOFManager = panzer::DOFManager;
+  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+
+  int np   = comm->getSize();
+  int rank = comm->getRank();
 
   const panzer::GlobalOrdinal nx = 12, ny = 5, nz = 3;
   const int px = np, py = 1, pz = 1;
@@ -117,12 +119,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DG, basic)
   // build the topology
   using CCM = CartesianConnManager;
   RCP<CCM> connManager = rcp(new CCM);
-  connManager->initialize(comm,nx,ny,nz,px,py,pz,bx,by,bz);
+  connManager->initialize(*comm,nx,ny,nz,px,py,pz,bx,by,bz);
 
   // build the dof manager, and assocaite with the topology
-  using DOFManager = panzer::DOFManager;
-  RCP<DOFManager> dofManager = rcp(new DOFManager);
-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
+  auto dofManager = Teuchos::make_rcp<DOFManager>();
+  dofManager->setConnManager(connManager, comm);
 
   using Basis = Intrepid2::Basis<PHX::Device,double,double>;
   
@@ -464,13 +465,13 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DG, basic)
 
     // send left
     if(rank!=0) {
-      Teuchos::send(comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
+      Teuchos::send(*comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
     }
 
     // recieve right, check 
     if(rank!=np-1) {
       std::vector<panzer::GlobalOrdinal> gid_remote(gid_sub_r.size(),-1);
-      Teuchos::receive(comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
+      Teuchos::receive(*comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
 
       for(std::size_t i=0;i<gid_sub_r.size();i++)
         TEST_EQUALITY(gid_sub_r[i],gid_remote[i]);

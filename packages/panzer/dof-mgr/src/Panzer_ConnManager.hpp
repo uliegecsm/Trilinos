@@ -47,6 +47,7 @@
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
+#include "Teuchos_Comm.hpp"
 #include "Shards_CellTopology.hpp"
 #include "PanzerDofMgr_config.hpp"
 
@@ -57,6 +58,9 @@ class FieldPattern; // from DOFManager
   /// Pure virtual base class for supplying mesh connectivity information to the DOF Manager.
   class ConnManager {
   public:
+
+    //! Type of MPI communicator used.
+    using teuchos_comm_t = Teuchos::RCP<const Teuchos::Comm<int> >;
 
     using GlobalOrdinal = panzer::GlobalOrdinal;
     using LocalOrdinal = int;

@@ -98,8 +98,8 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
         out << "================================================" << std::endl;
         out << " *** Testing one HGRAD variable *** " << std::endl;
       }
-      Teuchos::RCP<panzer::DOFManager> DOF = Teuchos::rcp(new panzer::DOFManager());
-      DOF->setConnManager(conn,*(Comm->getRawMpiComm()));
+      auto DOF = Teuchos::make_rcp<panzer::DOFManager>();
+      DOF->setConnManager(conn, Comm);
       DOF->setOrientationsRequired(true);
 
       for (size_t b=0; b<blocknames.size(); b++) {
@@ -122,7 +122,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
         out << " *** Testing one HCURL variable *** " << std::endl;
       }
       Teuchos::RCP<panzer::DOFManager> DOF = Teuchos::rcp(new panzer::DOFManager());
-      DOF->setConnManager(conn,*(Comm->getRawMpiComm()));
+      DOF->setConnManager(conn, Comm);
       DOF->setOrientationsRequired(true);
 
       for (size_t b=0; b<blocknames.size(); b++) {
@@ -145,7 +145,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
         out << " *** Testing one HDIV variable *** " << std::endl;
       }
       Teuchos::RCP<panzer::DOFManager> DOF = Teuchos::rcp(new panzer::DOFManager());
-      DOF->setConnManager(conn,*(Comm->getRawMpiComm()));
+      DOF->setConnManager(conn, Comm);
       DOF->setOrientationsRequired(true);
 
       for (size_t b=0; b<blocknames.size(); b++) {
@@ -168,7 +168,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
         out << " *** Testing one HVOL variable *** " << std::endl;
       }
       Teuchos::RCP<panzer::DOFManager> DOF = Teuchos::rcp(new panzer::DOFManager());
-      DOF->setConnManager(conn,*(Comm->getRawMpiComm()));
+      DOF->setConnManager(conn, Comm);
       DOF->setOrientationsRequired(true);
 
       for (size_t b=0; b<blocknames.size(); b++) {

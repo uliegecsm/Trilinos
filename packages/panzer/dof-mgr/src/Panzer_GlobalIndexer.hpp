@@ -58,12 +58,15 @@ class ConnManager;
 
 class GlobalIndexer {
 public:
+    //! Type of MPI communicator used.
+    using teuchos_comm_t = Teuchos::RCP<const Teuchos::Comm<int> >;
+public:
    //! Pure virtual destructor: prevents warnings with inline empty implementation 
   virtual ~GlobalIndexer() {}
 
    /** Get communicator associated with this global indexer.
      */
-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const = 0;
+   virtual teuchos_comm_t getComm() const = 0;
 
    /** Get the number of fields (total) stored by this DOF manager
      */

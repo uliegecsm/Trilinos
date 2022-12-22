@@ -150,14 +150,14 @@ DOFManager::DOFManager()
 { }
 
 ///////////////////////////////////////////////////////////////////////////////
-DOFManager::DOFManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm)
+DOFManager::DOFManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t comm)
   : numFields_(0),buildConnectivityRun_(false),requireOrientations_(false), useTieBreak_(false), useNeighbors_(false)
 {
-  setConnManager(connMngr,mpiComm);
+  setConnManager(connMngr, std::move(comm));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void DOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr, MPI_Comm mpiComm)
+void DOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t comm)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(buildConnectivityRun_,std::logic_error,
                       "DOFManager::setConnManager: setConnManager cannot be called after "
@@ -170,7 +170,7 @@ void DOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr, MPI_
     //We must also initialize vectors for FP associations.
   }
   blockToAssociatedFP_.resize(blockOrder_.size());
-  communicator_ = Teuchos::rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(mpiComm)));
+  communicator_ = std::move(comm);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

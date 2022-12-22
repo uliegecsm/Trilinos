@@ -82,6 +82,9 @@ namespace unit_test {
   */
 class CartesianConnManager : public virtual panzer::ConnManager {
 public:
+    //! Type of MPI communicator used.
+    using teuchos_comm_t = typename ConnManager::teuchos_comm_t;
+public:
 
    // A utility structure for storing triplet indices
    template <typename T>
@@ -106,7 +109,7 @@ public:
      * \param[in] by Number of blocks in the y direction
      * \param[in] elemTopo Topology of the mesh element (either Quadrilateral<4> or Triangular<3>)
      */
-   void initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny,
+   void initialize(const teuchos_comm_t::element_type & comm,GlobalOrdinal nx, GlobalOrdinal ny,
                    int px, int py,
                    int bx, int by,
                    const shards::CellTopology elemTopo=shards::getCellTopologyData<shards::Quadrilateral<4>>());
@@ -125,7 +128,7 @@ public:
      * \param[in] bz Number of blocks in the z direction
      * \param[in] elemTopo Topology of the mesh element (either Hexahedron<8> or Tetrahedron<4>)
      */
-   void initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny, GlobalOrdinal nz,
+   void initialize(const teuchos_comm_t::element_type & comm,GlobalOrdinal nx, GlobalOrdinal ny, GlobalOrdinal nz,
                    int px, int py, int pz,
                    int bx, int by, int bz,
                    const shards::CellTopology elemTopo=shards::getCellTopologyData<shards::Hexahedron<8>>());

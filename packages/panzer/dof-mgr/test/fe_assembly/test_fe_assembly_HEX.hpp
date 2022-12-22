@@ -82,6 +82,7 @@
 #include "Panzer_GlobalIndexer.hpp"
 #include "../cartesian_topology/CartesianConnManager.hpp"
 
+#include <Tpetra_Core.hpp>
 #include <Tpetra_Export.hpp>
 #include <Tpetra_Map.hpp>
 #include <Tpetra_CrsGraph.hpp>
@@ -251,7 +252,8 @@ int feAssemblyHex(int argc, char *argv[]) {
 
 #define ConstructWithLabel(obj, ...) obj(#obj, __VA_ARGS__)
 
-  Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
+  // Get the default MPI communicator. It will initialize MPI if needed.
+  const auto comm = Tpetra::getDefaultComm();
 
   //output stream/file
   Teuchos::RCP<Teuchos::FancyOStream> outStream;
@@ -266,7 +268,7 @@ int feAssemblyHex(int argc, char *argv[]) {
     local_ordinal_t nx = 2;
     local_ordinal_t ny            = nx;
     local_ordinal_t nz            = nx;
-    int np   = comm.getSize(); // number of processors
+    int np   = comm->getSize(); // number of processors
     int px = std::cbrt(np); while(np%px!=0) --px;
     int py = std::sqrt(np/px); while(np%py!=0) --py;
     int pz = np/(px*py);
@@ -294,7 +296,7 @@ int feAssemblyHex(int argc, char *argv[]) {
       errorFlag++;
     }
 
-    outStream = ((comm.getRank () == 0) && verbose) ?
+    outStream = ((comm->getRank () == 0) && verbose) ?
       getFancyOStream(Teuchos::rcpFromRef (std::cout)) :
       getFancyOStream(Teuchos::rcp (new Teuchos::oblackholestream ()));
 
@@ -316,7 +318,7 @@ int feAssemblyHex(int argc, char *argv[]) {
 
     // build the topology
     auto connManager = Teuchos::rcp(new panzer::unit_test::CartesianConnManager);
-    connManager->initialize(comm,
+    connManager->initialize(*comm,
         global_ordinal_t(nx*px),
         global_ordinal_t(ny*py),
         global_ordinal_t(nz*pz),
@@ -326,7 +328,7 @@ int feAssemblyHex(int argc, char *argv[]) {
 
     // build the dof manager, and assocaite with the topology
     auto dofManager = Teuchos::rcp(new panzer::DOFManager);
-    dofManager->setConnManager(connManager,*comm.getRawMpiComm());
+    dofManager->setConnManager(connManager,comm);
 
     // add solution field to the element block
     Teuchos::RCP< Intrepid2::Basis<DeviceSpaceType, scalar_t,scalar_t> > basis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_HEX_Cn_FEM<DeviceSpaceType,scalar_t,scalar_t>(degree));
@@ -335,7 +337,7 @@ int feAssemblyHex(int argc, char *argv[]) {
     dofManager->addField("block-0_0_0",fePattern);
 
     // try to get them all synced up
-    comm.barrier();
+    comm->barrier();
 
     dofManager->buildGlobalUnknowns();
 
@@ -508,9 +510,9 @@ int feAssemblyHex(int argc, char *argv[]) {
     auto globalIndexer = Teuchos::rcp_dynamic_cast<const panzer::GlobalIndexer >(dofManager);
     std::vector<global_ordinal_t> ownedIndices, ownedAndGhostedIndices;
     globalIndexer->getOwnedIndices(ownedIndices);
-    Teuchos::RCP<const map_t> ownedMap = Teuchos::rcp(new map_t(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedIndices,0,Teuchos::rcpFromRef(comm)));
+    Teuchos::RCP<const map_t> ownedMap = Teuchos::make_rcp<map_t>(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedIndices,0,comm);
     globalIndexer->getOwnedAndGhostedIndices(ownedAndGhostedIndices);
-    Teuchos::RCP<const map_t> ownedAndGhostedMap = Teuchos::rcp(new const map_t(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedAndGhostedIndices,0,Teuchos::rcpFromRef(comm)));
+    Teuchos::RCP<const map_t> ownedAndGhostedMap = Teuchos::make_rcp<const map_t>(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedAndGhostedIndices,0,comm);
 
      *outStream << "Total number of DoFs: " << ownedMap->getGlobalNumElements() << ", number of owned DoFs: " << ownedMap->getLocalNumElements() << "\n";
 
@@ -690,9 +692,9 @@ int feAssemblyHex(int argc, char *argv[]) {
   reportParams->set("YAML style", "spacious");
   if ( timingsFile != "" ){
     std::ofstream fout(timingsFile.c_str());
-    Teuchos::TimeMonitor::report(Teuchos::rcpFromRef(comm).ptr(), fout, reportParams);
+    Teuchos::TimeMonitor::report(comm.ptr(), fout, reportParams);
   } else {
-    Teuchos::TimeMonitor::report(Teuchos::rcpFromRef(comm).ptr(), *outStream);
+    Teuchos::TimeMonitor::report(comm.ptr(), *outStream);
   }
 
   if (errorFlag != 0)

@@ -44,7 +44,7 @@
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_RCP.hpp>
 #include <Teuchos_TimeMonitor.hpp>
-#include <Teuchos_DefaultMpiComm.hpp>
+#include <Teuchos_DefaultComm.hpp>
 
 #include <string>
 #include <iostream>
@@ -107,18 +107,14 @@ namespace panzer
     typedef Thyra::SpmdVectorSpaceBase<double> SpmdSpace;
 
     // build global (or serial communicator)
-#ifdef HAVE_MPI
-    Teuchos::RCP<const Teuchos::MpiComm<int>> tComm = Teuchos::rcp(new Teuchos::MpiComm<int>(MPI_COMM_WORLD));
-#else
-    Teuchos::RCP<const Teuchos::SerialComm<int>> tComm = Teuchos::rcp(new Teuchos::SerialComm<int>(MPI_COMM_WORLD));
-#endif
+    DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
 
-    int myRank = tComm->getRank();
+    int myRank  = tComm->getRank();
     int numProc = tComm->getSize();
 
     RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank, numProc));
-    RCP<DOFManager> dofManager = rcp(new DOFManager);
-    dofManager->setConnManager(connManager, MPI_COMM_WORLD);
+    auto dofManager = Teuchos::make_rcp<DOFManager>();
+    dofManager->setConnManager(connManager, comm);
 
     RCP<const panzer::FieldPattern> patternC1 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space, double, double>>();
 

@@ -44,7 +44,7 @@
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_RCP.hpp>
 #include <Teuchos_TimeMonitor.hpp>
-#include <Teuchos_DefaultMpiComm.hpp>
+#include <Teuchos_DefaultComm.hpp>
 
 #include <string>
 #include <iostream>
@@ -102,8 +102,8 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,equivalence_test)
    int numProc = tComm->getSize();   
 
    RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank,numProc));
-   RCP<DOFManager> dofManager = rcp(new DOFManager); 
-   dofManager->setConnManager(connManager,MPI_COMM_WORLD);
+   auto dofManager = Teuchos::make_rcp<DOFManager>(); 
+   dofManager->setConnManager(connManager, tComm);
 
    RCP<const panzer::FieldPattern> patternC1 
      = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space,double,double> >();
@@ -189,8 +189,7 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,equivalence_test)
 // this just excercises a bunch of functions
 TEUCHOS_UNIT_TEST(tFilteredUGI,filtering)
 {
-   RCP<const Teuchos::MpiComm<int> > tComm 
-     = rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(MPI_COMM_WORLD)));
+   panzer::DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
 
    // panzer::pauseToAttach();
 
@@ -198,12 +197,12 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,filtering)
    using Teuchos::rcp;
    using Teuchos::rcp_dynamic_cast;
 
-   int myRank = tComm->getRank(); 
-   int numProc = tComm->getSize(); 
+   int myRank  = comm->getRank(); 
+   int numProc = comm->getSize(); 
 
    RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank,numProc));
-   RCP<DOFManager> dofManager = rcp(new DOFManager); 
-   dofManager->setConnManager(connManager,MPI_COMM_WORLD);
+   auto dofManager = Teuchos::make_rcp<DOFManager>(); 
+   dofManager->setConnManager(connManager, comm);
 
    RCP<const panzer::FieldPattern> patternC1 
      = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space,double,double> >();
@@ -225,7 +224,7 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,filtering)
    {
      int mySize = Teuchos::as<int>(my_filtered.size());
      std::vector<int> neighborSizes(numProc,0);
-     Teuchos::gatherAll(*tComm,1,&mySize,Teuchos::as<int>(neighborSizes.size()),&neighborSizes[0]);
+     Teuchos::gatherAll(*comm,1,&mySize,Teuchos::as<int>(neighborSizes.size()),&neighborSizes[0]);
 
      out << "MY SZ = " << my_filtered.size() << std::endl;
      out << "SZ = " << neighborSizes[0] << std::endl;
@@ -236,7 +235,7 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,filtering)
        totalSize += Teuchos::as<int>(neighborSizes[i]);
 
      all_filtered.resize(totalSize);
-     Teuchos::gatherAll(*tComm,mySize,&my_filtered[0],Teuchos::as<int>(totalSize),&all_filtered[0]);
+     Teuchos::gatherAll(*comm,mySize,&my_filtered[0],Teuchos::as<int>(totalSize),&all_filtered[0]);
 
      out << "MY Filtered = ";
      for(std::size_t i=0;i<my_filtered.size();i++)

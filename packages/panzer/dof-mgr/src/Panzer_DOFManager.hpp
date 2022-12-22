@@ -75,10 +75,10 @@ public:
     * objects. This is equivalent to calling the default constructor and
     * then "setConnManager(...)" routine.
     */
-  DOFManager(const Teuchos::RCP<ConnManager> & connMngr, MPI_Comm mpiComm);
+  DOFManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t mpiComm);
 
   //! Adds a Connection Manager that will be associated with this DOFManager.
-  void setConnManager(const Teuchos::RCP<ConnManager> & connMngr, MPI_Comm mpiComm);
+  void setConnManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t mpiComm);
 
   Teuchos::RCP<const ConnManager> getConnManager() const
   { return connMngr_; }
@@ -234,8 +234,7 @@ public:
 
   int getFieldNum(const std::string & string) const;
 
-  Teuchos::RCP<Teuchos::Comm<int> > getComm() const
-  { return communicator_; }
+  teuchos_comm_t getComm() const { return communicator_; }
 
   Teuchos::RCP<const FieldPattern> getGeometricFieldPattern() const
   { return ga_fp_; }
@@ -409,7 +408,7 @@ protected:
   void buildLocalIdsFromOwnedAndGhostedElements();
 
   Teuchos::RCP<ConnManager> connMngr_;
-  Teuchos::RCP<Teuchos::Comm<int> > communicator_;
+  teuchos_comm_t communicator_;
 
   //Please note: AID=absolute ID. This is an attempt to remember that
   // fieldPatterns_ is unchanging storage for FPs.
