@@ -68,7 +68,7 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager_SimpleTests,assortedTests)
    RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank,numProc));
    BlockedDOFManager dofManager;
    dofManager.setUseDOFManagerFEI(false);
-   dofManager.setConnManager(connManager,MPI_COMM_WORLD);
+   dofManager.setConnManager(connManager, comm);
 
    TEST_ASSERT(dofManager.getComm()!=Teuchos::null);
    TEST_EQUALITY(dofManager.getConnManager(),connManager);
@@ -115,7 +115,7 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager_SimpleTests,registerFields)
    RCP<ConnManager> connManger = rcp(new unit_test::ConnManager(myRank,numProc));
    BlockedDOFManager dofManager;
    dofManager.setUseDOFManagerFEI(false);
-   dofManager.setConnManager(connManger,MPI_COMM_WORLD);
+   dofManager.setConnManager(connManger, comm);
 
    TEST_EQUALITY(dofManager.getMaxSubFieldNumber(),-1);
 
@@ -359,7 +359,7 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager_SimpleTests,getElement_gids_fieldoffsets)
    RCP<ConnManager> connManger = rcp(new unit_test::ConnManager(myRank,numProc));
    BlockedDOFManager dofManager;
    dofManager.setUseDOFManagerFEI(false);
-   dofManager.setConnManager(connManger,MPI_COMM_WORLD);
+   dofManager.setConnManager(connManger, comm);
 
    TEST_EQUALITY(dofManager.getMaxSubFieldNumber(),-1);
 
@@ -634,7 +634,7 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager,mergetests)
    /////////////////////////////////////////////////////////////////////////
    DOFManager dofManager[2];
 
-   dofManager[0].setConnManager(connManager,MPI_COMM_WORLD);
+   dofManager[0].setConnManager(connManager, comm);
    dofManager[0].addField("T",patternC1); // add it to all three blocks
    dofManager[0].addField("block_0","Ux",patternC1);
    dofManager[0].addField("block_0","Uy",patternC1);
@@ -642,7 +642,7 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager,mergetests)
    dofManager[0].addField("block_2","rho",patternC1);
    dofManager[0].buildGlobalUnknowns();
 
-   dofManager[1].setConnManager(connManager,MPI_COMM_WORLD);
+   dofManager[1].setConnManager(connManager, comm);
    dofManager[1].addField("x",patternC1);
    dofManager[1].buildGlobalUnknowns(dofManager[0].getGeometricFieldPattern());
 
@@ -659,7 +659,7 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager,mergetests)
    ////////////////////////////////////////////////////////
    BlockedDOFManager blkDofManager;
    blkDofManager.setUseDOFManagerFEI(false);
-   blkDofManager.setConnManager(connManager,MPI_COMM_WORLD);
+   blkDofManager.setConnManager(connManager, comm);
    blkDofManager.setFieldOrder(fieldOrder);
    blkDofManager.buildGlobalUnknowns(ugi_vector);
 

@@ -20,7 +20,7 @@ using Teuchos::rcpFromRef;
 namespace panzer::unit_test {
 
 void CartesianConnManager::
-initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny,
+initialize(const teuchos_comm_t::element_type& comm,GlobalOrdinal nx, GlobalOrdinal ny,
                                               int px, int py,
                                               int bx, int by,
                                               const shards::CellTopology elemTopo)
@@ -124,7 +124,7 @@ initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny
 }
 
 void CartesianConnManager::
-initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny, GlobalOrdinal nz,
+initialize(const teuchos_comm_t::element_type & comm,GlobalOrdinal nx, GlobalOrdinal ny, GlobalOrdinal nz,
                                               int px, int py,int pz,
                                               int bx, int by,int bz,
                                               const shards::CellTopology elemTopo)

@@ -27,6 +27,8 @@ namespace unit_test {
   */
 class GlobalIndexer : public virtual panzer::GlobalIndexer {
 public:
+   using typename panzer::GlobalIndexer::teuchos_comm_t;
+public:
    GlobalIndexer(int rank,int procCount);
 
    ~GlobalIndexer() {}
@@ -55,7 +57,7 @@ public:
 
    /** Get the communicator 
      */
-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const;
+   virtual teuchos_comm_t getComm() const;
 
    /** What are the blockIds included in this connection manager?
      */

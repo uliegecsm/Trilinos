@@ -531,7 +531,7 @@ const std::vector<int> & GlobalIndexer::getBlockFieldNumbers(const std::string &
       TEUCHOS_ASSERT(false);
 }
 
-Teuchos::RCP<Teuchos::Comm<int> > GlobalIndexer::getComm() const
+typename GlobalIndexer::teuchos_comm_t GlobalIndexer::getComm() const
 {
    #ifdef HAVE_MPI
       return Teuchos::rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(MPI_COMM_WORLD)));

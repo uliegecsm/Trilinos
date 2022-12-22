@@ -12,7 +12,7 @@
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_RCP.hpp>
 #include <Teuchos_TimeMonitor.hpp>
-#include <Teuchos_DefaultMpiComm.hpp>
+#include <Teuchos_DefaultComm.hpp>
 #include <Teuchos_CommHelpers.hpp>
 
 #include "Kokkos_Core.hpp"
@@ -60,13 +60,9 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, ho_gid_values)
   using DOFManager = panzer::DOFManager;
 
   // build global (or serial communicator)
-  #ifdef HAVE_MPI
-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
-  #else
-    THIS_REALLY_DOES_NOT_WORK
-  #endif
+  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
 
-  int np = comm.getSize(); // number of processors
+  int np = comm->getSize(); // number of processors
   //int rank = comm.getRank(); // processor rank
 
   // mesh description
@@ -82,11 +78,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, ho_gid_values)
 
   // build the topology
   const auto connManager = Teuchos::make_rcp<CCM>();
-  connManager->initialize(comm,nx,ny,px,py,bx,by);
+  connManager->initialize(*comm,nx,ny,px,py,bx,by);
 
   // build the dof manager, and assocaite with the topology
   const auto dofManager = Teuchos::make_rcp<DOFManager>();
-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
+  dofManager->setConnManager(connManager, comm);
 
   // add velocity (U) and PRESSURE fields to the MHD element block
   dofManager->addField("eblock-0_0","U",pattern_U);
@@ -132,7 +128,7 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, ho_gid_values)
 
   int count = Teuchos::as<int>(s_indices.size());
   int totalCount = 0;
-  Teuchos::reduceAll(comm,Teuchos::REDUCE_SUM,1,&count,&totalCount);
+  Teuchos::reduceAll(*comm,Teuchos::REDUCE_SUM,1,&count,&totalCount);
 
   TEST_EQUALITY(totalCount,(nx*poly_U+1)*(ny*poly_U+1)+(nx*poly_P+1)*(ny*poly_P+1))
 
@@ -152,13 +148,9 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, gid_values)
   using DOFManager = panzer::DOFManager;
 
   // build global (or serial communicator)
-  #ifdef HAVE_MPI
-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
-  #else
-    THIS_REALLY_DOES_NOT_WORK
-  #endif
+  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
 
-  int np = comm.getSize(); // number of processors
+  int np = comm->getSize(); // number of processors
   //int rank = comm.getRank(); // processor rank
 
   // mesh description
@@ -174,11 +166,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, gid_values)
 
   // build the topology
   const auto connManager = Teuchos::make_rcp<CCM>();
-  connManager->initialize(comm,nx,ny,px,py,bx,by);
+  connManager->initialize(*comm,nx,ny,px,py,bx,by);
 
   // build the dof manager, and assocaite with the topology
   const auto dofManager = Teuchos::make_rcp<DOFManager>();
-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
+  dofManager->setConnManager(connManager, comm);
 
   // add velocity (U) and PRESSURE fields to the MHD element block
   dofManager->addField("eblock-0_0","UX",pattern_U);
@@ -250,15 +242,10 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, quad2d)
   using CCM = CartesianConnManager;
   using DOFManager = panzer::DOFManager;
 
-  // build global (or serial communicator)
-  #ifdef HAVE_MPI
-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
-  #else
-    THIS_REALLY_DOES_NOT_WORK
-  #endif
+  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
 
-  int np = comm.getSize(); // number of processors
-  int rank = comm.getRank(); // processor rank
+  int np   = comm->getSize(); // number of processors
+  int rank = comm->getRank(); // processor rank
 
   // mesh description
   panzer::GlobalOrdinal nx = 10, ny = 7;//, nz = 4;
@@ -275,11 +262,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, quad2d)
   
   // build the topology
   const auto connManager = Teuchos::make_rcp<CCM>();
-  connManager->initialize(comm,nx,ny,px,py,bx,by);
+  connManager->initialize(*comm,nx,ny,px,py,bx,by);
 
   // build the dof manager, and assocaite with the topology
   const auto dofManager = Teuchos::make_rcp<DOFManager>();
-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
+  dofManager->setConnManager(connManager, comm);
 
   // add TEMPERATURE field to all element blocks (MHD and solid)
   dofManager->addField("TEMPERATURE",pattern_T);
@@ -472,13 +459,13 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, quad2d)
 
     // send left
     if(rank!=0) {
-      Teuchos::send(comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
+      Teuchos::send(*comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
     }
 
     // recieve right, check 
     if(rank!=np-1) {
       std::vector<panzer::GlobalOrdinal> gid_remote(gid_sub_r.size(),-1);
-      Teuchos::receive(comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
+      Teuchos::receive(*comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
 
       for(std::size_t i=0;i<gid_sub_r.size();i++)
         TEST_EQUALITY(gid_sub_r[i],gid_remote[i]);

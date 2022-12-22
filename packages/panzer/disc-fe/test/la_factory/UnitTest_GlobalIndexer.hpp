@@ -37,6 +37,9 @@ namespace unit_test {
   */
 class GlobalIndexer : public virtual panzer::GlobalIndexer {
 public:
+    using typename panzer::GlobalIndexer::teuchos_comm_t;
+
+public:
    GlobalIndexer(int rank,int procCount);
 
    ~GlobalIndexer() {}
@@ -63,7 +66,7 @@ public:
 
    virtual const std::string & getFieldString(int field) const;
 
-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const
+   virtual teuchos_comm_t getComm() const
    { 
       #ifdef HAVE_MPI
          return Teuchos::rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(MPI_COMM_WORLD)));
@@ -212,6 +215,8 @@ private:
   */
 class GlobalIndexer_Element : public virtual panzer::GlobalIndexer {
 public:
+   using typename panzer::GlobalIndexer::teuchos_comm_t;
+public:
    GlobalIndexer_Element(int rank,int procCount);
 
    ~GlobalIndexer_Element() {}
@@ -238,7 +243,7 @@ public:
 
    virtual const std::string & getFieldString(int field) const;
 
-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const
+   virtual teuchos_comm_t getComm() const
    { 
       #ifdef HAVE_MPI
          return Teuchos::rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(MPI_COMM_WORLD)));
@@ -330,6 +335,8 @@ private:
 
 class BlockGlobalIndexer : public virtual panzer::GlobalIndexer {
 public:
+   using typename panzer::GlobalIndexer::teuchos_comm_t;
+public:
    BlockGlobalIndexer(int blocks,int rank,int procCount);
 
    ~BlockGlobalIndexer() {}
@@ -358,7 +365,7 @@ public:
    virtual const std::string& getFieldString(int /* field */) const
    { TEUCHOS_ASSERT(false); static std::string empty = "EMPTY"; return empty; }
 
-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const
+   virtual teuchos_comm_t getComm() const
    { TEUCHOS_ASSERT(false); return Teuchos::null; }
 
    /** What are the blockIds included in this connection manager?

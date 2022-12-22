@@ -178,8 +178,7 @@ public:
    
    virtual ~Filtered_GlobalIndexer() {}
 
-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const 
-   { return base_->getComm(); }
+   virtual teuchos_comm_t getComm() const { return base_->getComm(); }
 
    virtual int getNumFields() const 
    { return base_->getNumFields(); }

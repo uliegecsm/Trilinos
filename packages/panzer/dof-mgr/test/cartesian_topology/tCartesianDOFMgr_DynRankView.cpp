@@ -12,7 +12,7 @@
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_RCP.hpp>
 #include <Teuchos_TimeMonitor.hpp>
-#include <Teuchos_DefaultMpiComm.hpp>
+#include <Teuchos_DefaultComm.hpp>
 #include <Teuchos_CommHelpers.hpp>
 
 #include "Kokkos_Core.hpp"
@@ -62,14 +62,9 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DynRankView, threed)
   using CCM = CartesianConnManager;
   using DOFManager = panzer::DOFManager;
 
-  // build global (or serial communicator)
-  #ifdef HAVE_MPI
-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
-  #else
-    THIS_REALLY_DOES_NOT_WORK
-  #endif
+  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
 
-  int np = comm.getSize(); // number of processors
+  int np = comm->getSize(); // number of processors
 
   // mesh description
   panzer::GlobalOrdinal nx = 10, ny = 7, nz = 4;
@@ -85,11 +80,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DynRankView, threed)
 
   // build the topology
   const auto connManager = Teuchos::make_rcp<CCM>();
-  connManager->initialize(comm,nx,ny,nz,px,py,pz,bx,by,bz);
+  connManager->initialize(*comm,nx,ny,nz,px,py,pz,bx,by,bz);
 
   // build the dof manager, and assocaite with the topology
   const auto dofManager = Teuchos::make_rcp<DOFManager>();
-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
+  dofManager->setConnManager(connManager, comm);
 
   // add TEMPERATURE field to all element blocks (MHD and solid)
   dofManager->addField("TEMPERATURE",pattern_T);
