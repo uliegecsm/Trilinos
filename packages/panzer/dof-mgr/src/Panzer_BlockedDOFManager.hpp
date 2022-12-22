@@ -81,7 +81,7 @@ public:
      * objects. This is equivalent to calling the default constructor and
      * then "setConnManager" routine.
      */
-   BlockedDOFManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm);
+   BlockedDOFManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t mpiComm);
 
    ////////////////////////////////////////////////////////////////////////////////////////////
    ////////////////////////////////////////////////////////////////////////////////////////////
@@ -90,8 +90,7 @@ public:
 
    /** Get communicator associated with this manager.
      */
-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const
-   { return communicator_; }
+   virtual teuchos_comm_t getComm() const { return communicator_; }
 
    /** \brief Get the number used for access to this
      *        field
@@ -280,7 +279,7 @@ public:
      * \param[in] connMngr Connection manager to use.
      * \param[in] mpiComm  Communicator to use.
      */
-   void setConnManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm);
+   void setConnManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t mpiComm);
 
 
    /** Get the FieldPattern describing the geometry used for this problem.
@@ -499,7 +498,7 @@ protected:
    /** Build a new indexer. The concrete type is specified internally by this object (FEI version standard)
      */
    Teuchos::RCP<GlobalIndexer> buildNewIndexer(const Teuchos::RCP<ConnManager> & connManager,
-                                                     MPI_Comm mpiComm) const;
+                                                     teuchos_comm_t mpiComm) const;
 
    /** Do appropriate casting below and set orientations for a particular indexer. (handles FEI versus standard DOFManager)
      */
@@ -573,11 +572,10 @@ protected:
    bool fieldsRegistered_;
 
    Teuchos::RCP<const FieldPattern> geomPattern_;
-   Teuchos::RCP<Teuchos::MpiComm<int> > communicator_;
+   teuchos_comm_t communicator_;
 
    std::vector<Teuchos::RCP<GlobalIndexer>> fieldBlockManagers_;
 
-   MPI_Comm mpiComm_;
    int maxSubFieldNum_;
 
    /** Maps: elem block ids ==> (fieldNum ==> gidFieldOffsets vector)

@@ -48,6 +48,7 @@
 // Teuchos includes
 #include "Teuchos_ConfigDefs.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
+#include "Teuchos_DefaultComm.hpp"
 #include "Teuchos_RCP.hpp"
 #include "Teuchos_ParameterList.hpp"
 #include "Teuchos_FancyOStream.hpp"
@@ -95,6 +96,10 @@ typedef Kokkos::DynRankView<double,PHX::Device> FieldContainer;
 namespace {
 
   TEUCHOS_UNIT_TEST( DOFManager_tests, BasicCreation ){
+
+    using dof_manager_t = panzer::DOFManager;
+    dof_manager_t::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+
     RCP<Teuchos::ParameterList> pl = rcp(new Teuchos::ParameterList);
     pl->set("X Blocks",2);
     pl->set("Y Blocks",2);
@@ -106,9 +111,9 @@ namespace {
     RCP<panzer_stk::STK_Interface> mesh = factory.buildMesh(MPI_COMM_WORLD);
     RCP<panzer::ConnManager> conn = rcp(new panzer_stk::STKConnManager(mesh));
 
-    RCP<panzer::DOFManager> my_DOFManager = Teuchos::rcp(new panzer::DOFManager());
+    auto my_DOFManager = Teuchos::make_rcp<dof_manager_t>();
     TEST_EQUALITY(my_DOFManager->getComm(),Teuchos::null);
-    my_DOFManager->setConnManager(conn,MPI_COMM_WORLD);
+    my_DOFManager->setConnManager(conn, comm);
 
     RCP<Intrepid2::Basis<PHX::exec_space,double,double>> basis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space,double,double>);
 
@@ -122,7 +127,7 @@ namespace {
     my_DOFManager->addField(names[1], pattern);
     my_DOFManager->addField(names[2], pattern);
 
-    my_DOFManager->setConnManager(conn, MPI_COMM_WORLD);
+    my_DOFManager->setConnManager(conn, comm);
 
     my_DOFManager->buildGlobalUnknowns();
     TEST_EQUALITY(my_DOFManager->getConnManager(),conn);

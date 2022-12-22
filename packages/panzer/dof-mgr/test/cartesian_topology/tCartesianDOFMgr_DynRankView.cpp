@@ -44,7 +44,7 @@
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_RCP.hpp>
 #include <Teuchos_TimeMonitor.hpp>
-#include <Teuchos_DefaultMpiComm.hpp>
+#include <Teuchos_DefaultComm.hpp>
 #include <Teuchos_CommHelpers.hpp>
 
 #include "Kokkos_Core.hpp"
@@ -97,15 +97,10 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DynRankView, threed)
   using CCM = CartesianConnManager;
   using DOFManager = panzer::DOFManager;
 
-  // build global (or serial communicator)
-  #ifdef HAVE_MPI
-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
-  #else
-    THIS_REALLY_DOES_NOT_WORK
-  #endif
+  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
 
-  int np = comm.getSize(); // number of processors
-  int rank = comm.getRank(); // processor rank
+  int np   = comm->getSize(); // number of processors
+  int rank = comm->getRank(); // processor rank
 
   // mesh description
   panzer::GlobalOrdinal nx = 10, ny = 7, nz = 4;
@@ -121,11 +116,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DynRankView, threed)
 
   // build the topology
   RCP<CCM> connManager = rcp(new CCM);
-  connManager->initialize(comm,nx,ny,nz,px,py,pz,bx,by,bz);
+  connManager->initialize(*comm,nx,ny,nz,px,py,pz,bx,by,bz);
 
   // build the dof manager, and assocaite with the topology
-  RCP<DOFManager> dofManager = rcp(new DOFManager);
-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
+  auto dofManager = Teuchos::make_rcp<DOFManager>();
+  dofManager->setConnManager(connManager, comm);
 
   // add TEMPERATURE field to all element blocks (MHD and solid)
   dofManager->addField("TEMPERATURE",pattern_T);
@@ -305,13 +300,13 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DynRankView, threed)
 
     // send left
     if(rank!=0) {
-      Teuchos::send(comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
+      Teuchos::send(*comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
     }
 
     // recieve right, check 
     if(rank!=np-1) {
       std::vector<panzer::GlobalOrdinal> gid_remote(gid_sub_r.size(),-1);
-      Teuchos::receive(comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
+      Teuchos::receive(*comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
 
       for(std::size_t i=0;i<gid_sub_r.size();i++)
         TEST_EQUALITY(gid_sub_r[i],gid_remote[i]);

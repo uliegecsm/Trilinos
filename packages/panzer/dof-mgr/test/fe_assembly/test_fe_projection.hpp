@@ -88,6 +88,7 @@
 #include "Panzer_GlobalIndexer.hpp"
 #include "../cartesian_topology/CartesianConnManager.hpp"
 
+#include <Tpetra_Core.hpp>
 #include <Tpetra_Export.hpp>
 #include <Tpetra_Map.hpp>
 #include <Tpetra_CrsGraph.hpp>
@@ -183,8 +184,8 @@ int feProjection(int argc, char *argv[]) {
 
   int errorFlag = 0;
 
-
-  Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
+  // Get the default MPI communicator. It will initialize MPI if needed.
+  const auto comm = Tpetra::getDefaultComm();
 
   //output stream/file
   Teuchos::RCP<Teuchos::FancyOStream> outStream;
@@ -201,7 +202,7 @@ int feProjection(int argc, char *argv[]) {
     local_ordinal_t nx = 2;
     local_ordinal_t ny            = nx;
     local_ordinal_t nz            = (dim == 3) ? nx :1;
-    int np   = comm.getSize(); // number of processors
+    int np   = comm->getSize(); // number of processors
     int px = (dim == 2) ? std::sqrt(np) : std::cbrt(np); while(np%px!=0) --px;
     int py = (dim == 2) ? np/px : std::sqrt(np/px); while(np%py!=0) --py;
     int pz = np/(px*py);
@@ -359,7 +360,7 @@ int feProjection(int argc, char *argv[]) {
       errorFlag++;
     }
 
-    outStream = ((comm.getRank () == 0) && verbose) ?
+    outStream = ((comm->getRank () == 0) && verbose) ?
         getFancyOStream(Teuchos::rcpFromRef (std::cout)) :
         getFancyOStream(Teuchos::rcp (new Teuchos::oblackholestream ()));
 
@@ -378,14 +379,14 @@ int feProjection(int argc, char *argv[]) {
     // build the topology
     auto connManager = Teuchos::rcp(new panzer::unit_test::CartesianConnManager);
     if(dim == 3) {
-      connManager->initialize(comm,
+      connManager->initialize(*comm,
           global_ordinal_t(nx*px),
           global_ordinal_t(ny*py),
           global_ordinal_t(nz*pz),
           px,py,pz,bx,by,bz,
           *cellTopoPtr);
     } else {
-      connManager->initialize(comm,
+      connManager->initialize(*comm,
           global_ordinal_t(nx*px),
           global_ordinal_t(ny*py),
           px,py,bx,by,
@@ -396,18 +397,18 @@ int feProjection(int argc, char *argv[]) {
     // *********************************** COMPUTE GLOBAL IDs OF VERTICES AND DOFs  ************************************
 
     // build the dof manager, and assocaite with the topology
-    auto dofManager = Teuchos::rcp(new panzer::DOFManager);
-    dofManager->setConnManager(connManager,*comm.getRawMpiComm());
+    auto dofManager = Teuchos::make_rcp<panzer::DOFManager>();
+    dofManager->setConnManager(connManager,comm);
 
     dofManager->setOrientationsRequired(basis->requireOrientation());
 
     auto basisCardinality = basis->getCardinality();
-    Teuchos::RCP<panzer::Intrepid2FieldPattern> fePattern = Teuchos::rcp(new panzer::Intrepid2FieldPattern(basis));
+    auto fePattern = Teuchos::make_rcp<panzer::Intrepid2FieldPattern>(basis);
     std::string blockId = (dim == 2) ? "block-0_0" : "block-0_0_0";
     dofManager->addField(blockId,fePattern);
 
     // try to get them all synced up
-    comm.barrier();
+    comm->barrier();
 
     dofManager->buildGlobalUnknowns();
 
@@ -516,7 +517,7 @@ int feProjection(int argc, char *argv[]) {
     auto globalIndexer = Teuchos::rcp_dynamic_cast<const panzer::GlobalIndexer >(dofManager);
     std::vector<global_ordinal_t> ownedIndices, ownedAndGhostedIndices;
     globalIndexer->getOwnedIndices(ownedIndices);
-    Teuchos::RCP<const map_t> ownedMap = Teuchos::rcp(new map_t(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedIndices,0,Teuchos::rcpFromRef(comm)));
+    Teuchos::RCP<const map_t> ownedMap = Teuchos::make_rcp<map_t>(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedIndices,0,comm);
 
     *outStream << "Total number of DoFs: " << ownedMap->getGlobalNumElements() << ", number of owned DoFs: " << ownedMap->getLocalNumElements() << "\n";
 
@@ -748,7 +749,7 @@ int feProjection(int argc, char *argv[]) {
     },norm2);
 
     double totalNorm2=0;
-    Teuchos::reduceAll(comm,Teuchos::REDUCE_SUM,1,&norm2,&totalNorm2);
+    Teuchos::reduceAll(*comm,Teuchos::REDUCE_SUM,1,&norm2,&totalNorm2);
 
     *outStream << "L2 error: " << std::sqrt(totalNorm2) << std::endl;
     if(std::sqrt(totalNorm2)>1e-12) {
@@ -1013,9 +1014,9 @@ int feProjection(int argc, char *argv[]) {
   reportParams->set("YAML style", "spacious");
   if ( timingsFile != "" ){
     std::ofstream fout(timingsFile.c_str());
-    Teuchos::TimeMonitor::report(Teuchos::rcpFromRef(comm).ptr(), fout, reportParams);
+    Teuchos::TimeMonitor::report(comm.ptr(), fout, reportParams);
   } else {
-    Teuchos::TimeMonitor::report(Teuchos::rcpFromRef(comm).ptr(), *outStream);
+    Teuchos::TimeMonitor::report(comm.ptr(), *outStream);
   }
 
   if (errorFlag != 0)

@@ -3,6 +3,7 @@
 #include "Kokkos_Core.hpp"
 
 #include "Teuchos_GlobalMPISession.hpp"
+#include "Teuchos_DefaultComm.hpp"
 
 #include "PanzerCore_config.hpp"
 #include "Panzer_IntrepidFieldPattern.hpp"
@@ -24,15 +25,16 @@ Teuchos::RCP<const panzer::FieldPattern> buildFieldPattern();
 int main(int argc,char * argv[])
 {
   using CCM = panzer::unit_test::CartesianConnManager;
-  using panzer::DOFManager;
+  using dof_manager_t = panzer::DOFManager;
   using Teuchos::RCP;
   using Teuchos::rcp;
 
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   Kokkos::initialize(argc,argv);
 
-  Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
-  int np   = comm.getSize(); // number of processors
+  dof_manager_t::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+
+  int np = comm->getSize(); // number of processors
 
   // timings output
   std::string timingsFile = "timings.yaml";
@@ -69,15 +71,15 @@ int main(int argc,char * argv[])
   
     // build the topology
     RCP<CCM> connManager = rcp(new CCM);
-    connManager->initialize(comm,
+    connManager->initialize(*comm,
                             Teuchos::as<panzer::GlobalOrdinal>(nx),
                             Teuchos::as<panzer::GlobalOrdinal>(ny),
                             Teuchos::as<panzer::GlobalOrdinal>(nz),
                             px,py,pz,bx,by,bz);
   
     // build the dof manager, and assocaite with the topology
-    RCP<DOFManager> dofManager = rcp(new DOFManager);
-    dofManager->setConnManager(connManager,*comm.getRawMpiComm());
+    auto dofManager = Teuchos::make_rcp<dof_manager_t>();
+    dofManager->setConnManager(connManager, comm);
   
     // add velocity (U) and PRESSURE fields to the MHD element block
     dofManager->addField("eblock-0_0_0","UX",pattern_U);
@@ -93,7 +95,7 @@ int main(int argc,char * argv[])
     dofManager->addField("eblock-0_1_0","UZ",pattern_U);
   
     // try to get them all synced up
-    comm.barrier();
+    comm->barrier();
 
     {
       PANZER_FUNC_TIME_MONITOR("panzer::ScalingTest::buildGlobalUnknowns");

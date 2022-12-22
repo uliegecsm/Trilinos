@@ -663,20 +663,16 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager_SimpleTests,validFieldOrder)
 
 TEUCHOS_UNIT_TEST(tBlockedDOFManager,mergetests)
 {
-
-   // build global (or serial communicator)
-   #ifdef HAVE_MPI
-      Teuchos::RCP<Epetra_Comm> eComm = Teuchos::rcp(new Epetra_MpiComm(MPI_COMM_WORLD));
-   #else
-      Teuchos::RCP<Epetra_Comm> eComm = Teuchos::rcp(new Epetra_SerialComm());
-   #endif
+   // Get global MPI communicator (or serial if MPI is not enabled)
+   using dof_manager_t = panzer::DOFManager;
+   dof_manager_t::teuchos_comm_t comm = DefaultComm<int>::getComm();
 
    using Teuchos::RCP;
    using Teuchos::rcp;
    using Teuchos::rcp_dynamic_cast;
 
-   int myRank = eComm->MyPID();
-   int numProc = eComm->NumProc();
+   int myRank  = comm->MyPID();
+   int numProc = comm->NumProc();
 
    RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank,numProc));
 
@@ -688,7 +684,7 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager,mergetests)
    /////////////////////////////////////////////////////////////////////////
    DOFManager dofManager[2]; 
 
-   dofManager[0].setConnManager(connManager,MPI_COMM_WORLD);
+   dofManager[0].setConnManager(connManager,comm);
    dofManager[0].addField("T",patternC1); // add it to all three blocks
    dofManager[0].addField("block_0","Ux",patternC1);
    dofManager[0].addField("block_0","Uy",patternC1);

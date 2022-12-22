@@ -99,22 +99,16 @@ TEUCHOS_UNIT_TEST(tEpetra_LOF_FilteredUGI,epetra_lof)
 
 
    // build global (or serial communicator)
-   #ifdef HAVE_MPI
-      RCP<Epetra_Comm> eComm = rcp(new Epetra_MpiComm(MPI_COMM_WORLD));
-      RCP<const Teuchos::MpiComm<int> > tComm 
-         = rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(MPI_COMM_WORLD)));
-   #else
-      PANZER DOES NOT DO SERIAL
-   #endif
+   DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
 
    // panzer::pauseToAttach();
 
-   int myRank = eComm->MyPID();
-   int numProc = eComm->NumProc();
+   int myRank  = comm->MyPID();
+   int numProc = comm->NumProc();
 
    RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank,numProc));
-   RCP<DOFManager> dofManager = rcp(new DOFManager); 
-   dofManager->setConnManager(connManager,MPI_COMM_WORLD);
+   auto dofManager = Teuchos::make_rcp<DOFManager>(); 
+   dofManager->setConnManager(connManager,comm);
 
    RCP<const panzer::FieldPattern> patternC1 
      = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space,double,double> >();

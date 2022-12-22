@@ -63,10 +63,10 @@ BlockedDOFManager::BlockedDOFManager()
    : fieldsRegistered_(false), maxSubFieldNum_(-1), requireOrientations_(false), useDOFManagerFEI_(true), useTieBreak_(false)
 { }
 
-BlockedDOFManager::BlockedDOFManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm)
+BlockedDOFManager::BlockedDOFManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t comm)
    : fieldsRegistered_(false), maxSubFieldNum_(-1), requireOrientations_(false), useDOFManagerFEI_(true), useTieBreak_(false)
 {
-   setConnManager(connMngr,mpiComm);
+   setConnManager(connMngr, std::move(comm));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -537,28 +537,14 @@ void BlockedDOFManager::ownedIndices(const std::vector<GlobalOrdinal> & indices,
 ////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-
-/** \brief Set the connection manager and MPI_Comm objects.
-  *
-  * Set the connection manager and MPI_Comm objects. If this method
-  * is called more than once, the behavior is to reset the indices in
-  * the DOF manager.  However, the fields will be the same (this assumes
-  * that the element blocks are consistent with the fields). The indices
-  * will need to be rebuilt by calling <code>buildGlobalUnknowns</code>.
-  *
-  * \param[in] connMngr Connection manager to use.
-  * \param[in] mpiComm  Communicator to use.
-  */
-void BlockedDOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm)
+void BlockedDOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t comm)
 {
-   communicator_ = Teuchos::rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(mpiComm)));
+   communicator_ = std::move(comm);
 
    // this kills any old connection manager
    resetIndices();
 
    connMngr_ = connMngr;
-
-   mpiComm_ = *communicator_->getRawMpiComm();
 }
 
 /** \brief Reset the indicies for this DOF manager.
@@ -666,7 +652,7 @@ void BlockedDOFManager::registerFields(bool buildSubUGIs)
    // build sub DOFManagers for each field block
    if(buildSubUGIs) {
      for(std::size_t fldBlk=0;fldBlk<fieldOrder_.size();fldBlk++) {
-       Teuchos::RCP<panzer::GlobalIndexer> dofManager = buildNewIndexer(getConnManager(),mpiComm_);
+       Teuchos::RCP<panzer::GlobalIndexer> dofManager = buildNewIndexer(getConnManager(), communicator_);
 
        // add in these fields to the new manager
        this->addFieldsToFieldBlockManager(fieldOrder_[fldBlk],*dofManager);
@@ -740,7 +726,7 @@ void BlockedDOFManager::registerFields(bool buildSubUGIs)
 }
 
 Teuchos::RCP<GlobalIndexer> 
-BlockedDOFManager::buildNewIndexer(const Teuchos::RCP<ConnManager> & connManager,MPI_Comm mpiComm) const
+BlockedDOFManager::buildNewIndexer(const Teuchos::RCP<ConnManager> & connManager, teuchos_comm_t mpiComm) const
 {
   Teuchos::RCP<panzer::DOFManager> dofManager = Teuchos::rcp(new panzer::DOFManager);
   dofManager->enableTieBreak(useTieBreak_);
