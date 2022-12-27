@@ -536,6 +536,7 @@ public:
 
     KOKKOS_INLINE_FUNCTION std::size_t getSize() const {return size;}
 
+/*
     KOKKOS_INLINE_FUNCTION bool operator> (double v)
     {
         double sum = 0;
@@ -589,7 +590,7 @@ public:
 
         return sum != v*size;
     }
-
+*/
     KOKKOS_INLINE_FUNCTION bool operator== (const Mask<scalar> &m2)
     {
         bool all = true;

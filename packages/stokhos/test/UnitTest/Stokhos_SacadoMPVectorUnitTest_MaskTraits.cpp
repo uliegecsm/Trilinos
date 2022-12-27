@@ -341,6 +341,7 @@ TEUCHOS_UNIT_TEST( MP_Vector_MaskTraits, Mask_XOR)
     TEST_EQUALITY( XOR(!m2), false );
 }
 
+/*
 TEUCHOS_UNIT_TEST( MP_Vector_MaskTraits, Mask_compared_to_double)
 {
     constexpr int ensemble_size = 8;
@@ -382,6 +383,7 @@ TEUCHOS_UNIT_TEST( MP_Vector_MaskTraits, Mask_compared_to_double)
     TEST_EQUALITY(m2>0.5,true);
     TEST_EQUALITY(m2<0.5,false);
 }
+*/
 
 TEUCHOS_UNIT_TEST( MP_Vector_MaskTraits, Mask_AND_Mask)
 {
