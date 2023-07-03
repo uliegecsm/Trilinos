@@ -3657,9 +3657,22 @@ class ViewMapping<
   using DstType   = ViewMapping<DstTraits, void>;
   using SrcType   = ViewMapping<SrcTraits, void>;
 
+  //! A zero-rank view is always assignable in this case.
+  template <size_t src_rank = SrcType::Rank,
+            std::enable_if_t<(src_rank == 0)>* = nullptr>
   KOKKOS_INLINE_FUNCTION
   static bool assignable_layout_check(DstType&,
-                                      const SrcType& src)  // Runtime check
+                                      const SrcType& src)
+  {
+    return true;
+  }
+
+  //! Otherwise, source view stride must be checked.
+  template <size_t src_rank = SrcType::Rank,
+            std::enable_if_t<(src_rank > 0)>* = nullptr>
+  KOKKOS_INLINE_FUNCTION
+  static bool assignable_layout_check(DstType&,
+                                      const SrcType& src)
   {
     size_t strides[9];
     bool assignable = true;
