@@ -1,0 +1,1175 @@
+From 8e3c76c018f15963c1fe8f0816edc9d58564dc9a Mon Sep 17 00:00:00 2001
+From: "romin.tomasetti" <romin.tomasetti@gmail.com>
+Date: Thu, 22 Dec 2022 10:26:31 +0000
+Subject: [PATCH] panzer: use Teuchos::MpiComm
+
+---
+ .../periodic_bcs/periodic_32bit_int_limit.cpp | 10 ++--
+ .../stk_connmngr/tDOFManager2_SimpleTests.cpp | 11 ++--
+ .../tEpetra_LOF_FilteredGlobalIndexer.cpp     | 16 ++----
+ .../tTpetra_LOF_FilteredGlobalIndexer.cpp     | 14 ++---
+ .../dof-mgr/example/CartesianScaling/main.cpp | 16 +++---
+ .../dof-mgr/src/Panzer_BlockedDOFManager.cpp  | 26 +++------
+ .../dof-mgr/src/Panzer_BlockedDOFManager.hpp  | 12 ++---
+ .../panzer/dof-mgr/src/Panzer_ConnManager.hpp |  4 ++
+ .../panzer/dof-mgr/src/Panzer_DOFManager.cpp  |  8 +--
+ .../panzer/dof-mgr/src/Panzer_DOFManager.hpp  |  9 ++--
+ .../src/Panzer_Filtered_GlobalIndexer.hpp     |  3 +-
+ .../dof-mgr/src/Panzer_GlobalIndexer.hpp      |  5 +-
+ .../CartesianConnManager.cpp                  |  4 +-
+ .../CartesianConnManager.hpp                  |  7 ++-
+ .../cartesian_topology/tCartesianDOFMgr.cpp   | 22 ++++----
+ .../tCartesianDOFMgr_DG.cpp                   | 21 ++++----
+ .../tCartesianDOFMgr_DynRankView.cpp          | 23 ++++----
+ .../tCartesianDOFMgr_HighOrder.cpp            | 53 +++++++------------
+ .../test/dofmngr_test/tBlockedDOFManager.cpp  | 16 +++---
+ .../test/dofmngr_test/tFilteredUGI.cpp        | 21 ++++----
+ .../test/fe_assembly/test_fe_assembly_HEX.hpp | 22 ++++----
+ .../test/fe_assembly/test_fe_projection.hpp   | 29 +++++-----
+ 22 files changed, 159 insertions(+), 193 deletions(-)
+
+diff --git a/packages/panzer/adapters-stk/test/periodic_bcs/periodic_32bit_int_limit.cpp b/packages/panzer/adapters-stk/test/periodic_bcs/periodic_32bit_int_limit.cpp
+index 0d3deff4ba6..f37488b5b25 100644
+--- a/packages/panzer/adapters-stk/test/periodic_bcs/periodic_32bit_int_limit.cpp
++++ b/packages/panzer/adapters-stk/test/periodic_bcs/periodic_32bit_int_limit.cpp
+@@ -98,8 +98,8 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
+         out << "================================================" << std::endl;
+         out << " *** Testing one HGRAD variable *** " << std::endl;
+       }
+-      Teuchos::RCP<panzer::DOFManager> DOF = Teuchos::rcp(new panzer::DOFManager());
+-      DOF->setConnManager(conn,*(Comm->getRawMpiComm()));
++      auto DOF = Teuchos::make_rcp<panzer::DOFManager>();
++      DOF->setConnManager(conn, Comm);
+       DOF->setOrientationsRequired(true);
+ 
+       for (size_t b=0; b<blocknames.size(); b++) {
+@@ -122,7 +122,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
+         out << " *** Testing one HCURL variable *** " << std::endl;
+       }
+       Teuchos::RCP<panzer::DOFManager> DOF = Teuchos::rcp(new panzer::DOFManager());
+-      DOF->setConnManager(conn,*(Comm->getRawMpiComm()));
++      DOF->setConnManager(conn, Comm);
+       DOF->setOrientationsRequired(true);
+ 
+       for (size_t b=0; b<blocknames.size(); b++) {
+@@ -145,7 +145,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
+         out << " *** Testing one HDIV variable *** " << std::endl;
+       }
+       Teuchos::RCP<panzer::DOFManager> DOF = Teuchos::rcp(new panzer::DOFManager());
+-      DOF->setConnManager(conn,*(Comm->getRawMpiComm()));
++      DOF->setConnManager(conn, Comm);
+       DOF->setOrientationsRequired(true);
+ 
+       for (size_t b=0; b<blocknames.size(); b++) {
+@@ -168,7 +168,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
+         out << " *** Testing one HVOL variable *** " << std::endl;
+       }
+       Teuchos::RCP<panzer::DOFManager> DOF = Teuchos::rcp(new panzer::DOFManager());
+-      DOF->setConnManager(conn,*(Comm->getRawMpiComm()));
++      DOF->setConnManager(conn, Comm);
+       DOF->setOrientationsRequired(true);
+ 
+       for (size_t b=0; b<blocknames.size(); b++) {
+diff --git a/packages/panzer/adapters-stk/test/stk_connmngr/tDOFManager2_SimpleTests.cpp b/packages/panzer/adapters-stk/test/stk_connmngr/tDOFManager2_SimpleTests.cpp
+index 6339053f79e..63ea560ec88 100644
+--- a/packages/panzer/adapters-stk/test/stk_connmngr/tDOFManager2_SimpleTests.cpp
++++ b/packages/panzer/adapters-stk/test/stk_connmngr/tDOFManager2_SimpleTests.cpp
+@@ -48,6 +48,7 @@
+ // Teuchos includes
+ #include "Teuchos_ConfigDefs.hpp"
+ #include "Teuchos_GlobalMPISession.hpp"
++#include "Teuchos_DefaultComm.hpp"
+ #include "Teuchos_RCP.hpp"
+ #include "Teuchos_ParameterList.hpp"
+ #include "Teuchos_FancyOStream.hpp"
+@@ -95,6 +96,10 @@ typedef Kokkos::DynRankView<double,PHX::Device> FieldContainer;
+ namespace {
+ 
+   TEUCHOS_UNIT_TEST( DOFManager_tests, BasicCreation ){
++
++    using dof_manager_t = panzer::DOFManager;
++    dof_manager_t::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
++
+     RCP<Teuchos::ParameterList> pl = rcp(new Teuchos::ParameterList);
+     pl->set("X Blocks",2);
+     pl->set("Y Blocks",2);
+@@ -106,9 +111,9 @@ namespace {
+     RCP<panzer_stk::STK_Interface> mesh = factory.buildMesh(MPI_COMM_WORLD);
+     RCP<panzer::ConnManager> conn = rcp(new panzer_stk::STKConnManager(mesh));
+ 
+-    RCP<panzer::DOFManager> my_DOFManager = Teuchos::rcp(new panzer::DOFManager());
++    auto my_DOFManager = Teuchos::make_rcp<dof_manager_t>();
+     TEST_EQUALITY(my_DOFManager->getComm(),Teuchos::null);
+-    my_DOFManager->setConnManager(conn,MPI_COMM_WORLD);
++    my_DOFManager->setConnManager(conn, comm);
+ 
+     RCP<Intrepid2::Basis<PHX::exec_space,double,double>> basis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space,double,double>);
+ 
+@@ -122,7 +127,7 @@ namespace {
+     my_DOFManager->addField(names[1], pattern);
+     my_DOFManager->addField(names[2], pattern);
+ 
+-    my_DOFManager->setConnManager(conn, MPI_COMM_WORLD);
++    my_DOFManager->setConnManager(conn, comm);
+ 
+     my_DOFManager->buildGlobalUnknowns();
+     TEST_EQUALITY(my_DOFManager->getConnManager(),conn);
+diff --git a/packages/panzer/disc-fe/test/la_factory/tEpetra_LOF_FilteredGlobalIndexer.cpp b/packages/panzer/disc-fe/test/la_factory/tEpetra_LOF_FilteredGlobalIndexer.cpp
+index 2d270b5a04f..162fce93a45 100644
+--- a/packages/panzer/disc-fe/test/la_factory/tEpetra_LOF_FilteredGlobalIndexer.cpp
++++ b/packages/panzer/disc-fe/test/la_factory/tEpetra_LOF_FilteredGlobalIndexer.cpp
+@@ -99,22 +99,16 @@ TEUCHOS_UNIT_TEST(tEpetra_LOF_FilteredUGI,epetra_lof)
+ 
+ 
+    // build global (or serial communicator)
+-   #ifdef HAVE_MPI
+-      RCP<Epetra_Comm> eComm = rcp(new Epetra_MpiComm(MPI_COMM_WORLD));
+-      RCP<const Teuchos::MpiComm<int> > tComm 
+-         = rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(MPI_COMM_WORLD)));
+-   #else
+-      PANZER DOES NOT DO SERIAL
+-   #endif
++   DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+ 
+    // panzer::pauseToAttach();
+ 
+-   int myRank = eComm->MyPID();
+-   int numProc = eComm->NumProc();
++   int myRank  = comm->MyPID();
++   int numProc = comm->NumProc();
+ 
+    RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank,numProc));
+-   RCP<DOFManager> dofManager = rcp(new DOFManager); 
+-   dofManager->setConnManager(connManager,MPI_COMM_WORLD);
++   auto dofManager = Teuchos::make_rcp<DOFManager>(); 
++   dofManager->setConnManager(connManager,comm);
+ 
+    RCP<const panzer::FieldPattern> patternC1 
+      = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space,double,double> >();
+diff --git a/packages/panzer/disc-fe/test/la_factory/tTpetra_LOF_FilteredGlobalIndexer.cpp b/packages/panzer/disc-fe/test/la_factory/tTpetra_LOF_FilteredGlobalIndexer.cpp
+index 10083371e10..7282573d999 100644
+--- a/packages/panzer/disc-fe/test/la_factory/tTpetra_LOF_FilteredGlobalIndexer.cpp
++++ b/packages/panzer/disc-fe/test/la_factory/tTpetra_LOF_FilteredGlobalIndexer.cpp
+@@ -44,7 +44,7 @@
+ #include <Teuchos_UnitTestHarness.hpp>
+ #include <Teuchos_RCP.hpp>
+ #include <Teuchos_TimeMonitor.hpp>
+-#include <Teuchos_DefaultMpiComm.hpp>
++#include <Teuchos_DefaultComm.hpp>
+ 
+ #include <string>
+ #include <iostream>
+@@ -107,18 +107,14 @@ namespace panzer
+     typedef Thyra::SpmdVectorSpaceBase<double> SpmdSpace;
+ 
+     // build global (or serial communicator)
+-#ifdef HAVE_MPI
+-    Teuchos::RCP<const Teuchos::MpiComm<int>> tComm = Teuchos::rcp(new Teuchos::MpiComm<int>(MPI_COMM_WORLD));
+-#else
+-    Teuchos::RCP<const Teuchos::SerialComm<int>> tComm = Teuchos::rcp(new Teuchos::SerialComm<int>(MPI_COMM_WORLD));
+-#endif
++    DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+ 
+-    int myRank = tComm->getRank();
++    int myRank  = tComm->getRank();
+     int numProc = tComm->getSize();
+ 
+     RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank, numProc));
+-    RCP<DOFManager> dofManager = rcp(new DOFManager);
+-    dofManager->setConnManager(connManager, MPI_COMM_WORLD);
++    auto dofManager = Teuchos::make_rcp<DOFManager>();
++    dofManager->setConnManager(connManager, comm);
+ 
+     RCP<const panzer::FieldPattern> patternC1 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space, double, double>>();
+ 
+diff --git a/packages/panzer/dof-mgr/example/CartesianScaling/main.cpp b/packages/panzer/dof-mgr/example/CartesianScaling/main.cpp
+index 17c11a228e3..347e6329f82 100644
+--- a/packages/panzer/dof-mgr/example/CartesianScaling/main.cpp
++++ b/packages/panzer/dof-mgr/example/CartesianScaling/main.cpp
+@@ -3,6 +3,7 @@
+ #include "Kokkos_Core.hpp"
+ 
+ #include "Teuchos_GlobalMPISession.hpp"
++#include "Teuchos_DefaultComm.hpp"
+ 
+ #include "PanzerCore_config.hpp"
+ #include "Panzer_IntrepidFieldPattern.hpp"
+@@ -24,15 +25,16 @@ Teuchos::RCP<const panzer::FieldPattern> buildFieldPattern();
+ int main(int argc,char * argv[])
+ {
+   using CCM = panzer::unit_test::CartesianConnManager;
+-  using panzer::DOFManager;
++  using dof_manager_t = panzer::DOFManager;
+   using Teuchos::RCP;
+   using Teuchos::rcp;
+ 
+   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
+   Kokkos::initialize(argc,argv);
+ 
+-  Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
+-  int np   = comm.getSize(); // number of processors
++  dof_manager_t::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
++
++  int np = comm->getSize(); // number of processors
+ 
+   // timings output
+   std::string timingsFile = "timings.yaml";
+@@ -69,15 +71,15 @@ int main(int argc,char * argv[])
+   
+     // build the topology
+     RCP<CCM> connManager = rcp(new CCM);
+-    connManager->initialize(comm,
++    connManager->initialize(*comm,
+                             Teuchos::as<panzer::GlobalOrdinal>(nx),
+                             Teuchos::as<panzer::GlobalOrdinal>(ny),
+                             Teuchos::as<panzer::GlobalOrdinal>(nz),
+                             px,py,pz,bx,by,bz);
+   
+     // build the dof manager, and assocaite with the topology
+-    RCP<DOFManager> dofManager = rcp(new DOFManager);
+-    dofManager->setConnManager(connManager,*comm.getRawMpiComm());
++    auto dofManager = Teuchos::make_rcp<dof_manager_t>();
++    dofManager->setConnManager(connManager, comm);
+   
+     // add velocity (U) and PRESSURE fields to the MHD element block
+     dofManager->addField("eblock-0_0_0","UX",pattern_U);
+@@ -93,7 +95,7 @@ int main(int argc,char * argv[])
+     dofManager->addField("eblock-0_1_0","UZ",pattern_U);
+   
+     // try to get them all synced up
+-    comm.barrier();
++    comm->barrier();
+ 
+     {
+       PANZER_FUNC_TIME_MONITOR("panzer::ScalingTest::buildGlobalUnknowns");
+diff --git a/packages/panzer/dof-mgr/src/Panzer_BlockedDOFManager.cpp b/packages/panzer/dof-mgr/src/Panzer_BlockedDOFManager.cpp
+index a1dbae4ae5d..fd4bdef20b9 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_BlockedDOFManager.cpp
++++ b/packages/panzer/dof-mgr/src/Panzer_BlockedDOFManager.cpp
+@@ -63,10 +63,10 @@ BlockedDOFManager::BlockedDOFManager()
+    : fieldsRegistered_(false), maxSubFieldNum_(-1), requireOrientations_(false), useDOFManagerFEI_(true), useTieBreak_(false)
+ { }
+ 
+-BlockedDOFManager::BlockedDOFManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm)
++BlockedDOFManager::BlockedDOFManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t comm)
+    : fieldsRegistered_(false), maxSubFieldNum_(-1), requireOrientations_(false), useDOFManagerFEI_(true), useTieBreak_(false)
+ {
+-   setConnManager(connMngr,mpiComm);
++   setConnManager(connMngr, std::move(comm));
+ }
+ 
+ ////////////////////////////////////////////////////////////////////////////////////////////
+@@ -537,28 +537,14 @@ void BlockedDOFManager::ownedIndices(const std::vector<GlobalOrdinal> & indices,
+ ////////////////////////////////////////////////////////////////////////////////////////////
+ ////////////////////////////////////////////////////////////////////////////////////////////
+ 
+-
+-/** \brief Set the connection manager and MPI_Comm objects.
+-  *
+-  * Set the connection manager and MPI_Comm objects. If this method
+-  * is called more than once, the behavior is to reset the indices in
+-  * the DOF manager.  However, the fields will be the same (this assumes
+-  * that the element blocks are consistent with the fields). The indices
+-  * will need to be rebuilt by calling <code>buildGlobalUnknowns</code>.
+-  *
+-  * \param[in] connMngr Connection manager to use.
+-  * \param[in] mpiComm  Communicator to use.
+-  */
+-void BlockedDOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm)
++void BlockedDOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t comm)
+ {
+-   communicator_ = Teuchos::rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(mpiComm)));
++   communicator_ = std::move(comm);
+ 
+    // this kills any old connection manager
+    resetIndices();
+ 
+    connMngr_ = connMngr;
+-
+-   mpiComm_ = *communicator_->getRawMpiComm();
+ }
+ 
+ /** \brief Reset the indicies for this DOF manager.
+@@ -666,7 +652,7 @@ void BlockedDOFManager::registerFields(bool buildSubUGIs)
+    // build sub DOFManagers for each field block
+    if(buildSubUGIs) {
+      for(std::size_t fldBlk=0;fldBlk<fieldOrder_.size();fldBlk++) {
+-       Teuchos::RCP<panzer::GlobalIndexer> dofManager = buildNewIndexer(getConnManager(),mpiComm_);
++       Teuchos::RCP<panzer::GlobalIndexer> dofManager = buildNewIndexer(getConnManager(), communicator_);
+ 
+        // add in these fields to the new manager
+        this->addFieldsToFieldBlockManager(fieldOrder_[fldBlk],*dofManager);
+@@ -740,7 +726,7 @@ void BlockedDOFManager::registerFields(bool buildSubUGIs)
+ }
+ 
+ Teuchos::RCP<GlobalIndexer> 
+-BlockedDOFManager::buildNewIndexer(const Teuchos::RCP<ConnManager> & connManager,MPI_Comm mpiComm) const
++BlockedDOFManager::buildNewIndexer(const Teuchos::RCP<ConnManager> & connManager, teuchos_comm_t mpiComm) const
+ {
+   Teuchos::RCP<panzer::DOFManager> dofManager = Teuchos::rcp(new panzer::DOFManager);
+   dofManager->enableTieBreak(useTieBreak_);
+diff --git a/packages/panzer/dof-mgr/src/Panzer_BlockedDOFManager.hpp b/packages/panzer/dof-mgr/src/Panzer_BlockedDOFManager.hpp
+index f1ca5d9ecd0..b0e60e277f1 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_BlockedDOFManager.hpp
++++ b/packages/panzer/dof-mgr/src/Panzer_BlockedDOFManager.hpp
+@@ -81,7 +81,7 @@ public:
+      * objects. This is equivalent to calling the default constructor and
+      * then "setConnManager" routine.
+      */
+-   BlockedDOFManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm);
++   BlockedDOFManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t mpiComm);
+ 
+    ////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////
+@@ -90,8 +90,7 @@ public:
+ 
+    /** Get communicator associated with this manager.
+      */
+-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const
+-   { return communicator_; }
++   virtual teuchos_comm_t getComm() const { return communicator_; }
+ 
+    /** \brief Get the number used for access to this
+      *        field
+@@ -280,7 +279,7 @@ public:
+      * \param[in] connMngr Connection manager to use.
+      * \param[in] mpiComm  Communicator to use.
+      */
+-   void setConnManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm);
++   void setConnManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t mpiComm);
+ 
+ 
+    /** Get the FieldPattern describing the geometry used for this problem.
+@@ -499,7 +498,7 @@ protected:
+    /** Build a new indexer. The concrete type is specified internally by this object (FEI version standard)
+      */
+    Teuchos::RCP<GlobalIndexer> buildNewIndexer(const Teuchos::RCP<ConnManager> & connManager,
+-                                                     MPI_Comm mpiComm) const;
++                                                     teuchos_comm_t mpiComm) const;
+ 
+    /** Do appropriate casting below and set orientations for a particular indexer. (handles FEI versus standard DOFManager)
+      */
+@@ -573,11 +572,10 @@ protected:
+    bool fieldsRegistered_;
+ 
+    Teuchos::RCP<const FieldPattern> geomPattern_;
+-   Teuchos::RCP<Teuchos::MpiComm<int> > communicator_;
++   teuchos_comm_t communicator_;
+ 
+    std::vector<Teuchos::RCP<GlobalIndexer>> fieldBlockManagers_;
+ 
+-   MPI_Comm mpiComm_;
+    int maxSubFieldNum_;
+ 
+    /** Maps: elem block ids ==> (fieldNum ==> gidFieldOffsets vector)
+diff --git a/packages/panzer/dof-mgr/src/Panzer_ConnManager.hpp b/packages/panzer/dof-mgr/src/Panzer_ConnManager.hpp
+index 1ee0f965230..207e91bf08d 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_ConnManager.hpp
++++ b/packages/panzer/dof-mgr/src/Panzer_ConnManager.hpp
+@@ -47,6 +47,7 @@
+ 
+ // Teuchos includes
+ #include "Teuchos_RCP.hpp"
++#include "Teuchos_Comm.hpp"
+ #include "Shards_CellTopology.hpp"
+ #include "PanzerDofMgr_config.hpp"
+ 
+@@ -58,6 +59,9 @@ class FieldPattern; // from DOFManager
+   class ConnManager {
+   public:
+ 
++    //! Type of MPI communicator used.
++    using teuchos_comm_t = Teuchos::RCP<const Teuchos::Comm<int> >;
++
+     using GlobalOrdinal = panzer::GlobalOrdinal;
+     using LocalOrdinal = int;
+ 
+diff --git a/packages/panzer/dof-mgr/src/Panzer_DOFManager.cpp b/packages/panzer/dof-mgr/src/Panzer_DOFManager.cpp
+index 504bb1bc7e1..c68c2a974a8 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_DOFManager.cpp
++++ b/packages/panzer/dof-mgr/src/Panzer_DOFManager.cpp
+@@ -150,14 +150,14 @@ DOFManager::DOFManager()
+ { }
+ 
+ ///////////////////////////////////////////////////////////////////////////////
+-DOFManager::DOFManager(const Teuchos::RCP<ConnManager> & connMngr,MPI_Comm mpiComm)
++DOFManager::DOFManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t comm)
+   : numFields_(0),buildConnectivityRun_(false),requireOrientations_(false), useTieBreak_(false), useNeighbors_(false)
+ {
+-  setConnManager(connMngr,mpiComm);
++  setConnManager(connMngr, std::move(comm));
+ }
+ 
+ ///////////////////////////////////////////////////////////////////////////////
+-void DOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr, MPI_Comm mpiComm)
++void DOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t comm)
+ {
+   TEUCHOS_TEST_FOR_EXCEPTION(buildConnectivityRun_,std::logic_error,
+                       "DOFManager::setConnManager: setConnManager cannot be called after "
+@@ -170,7 +170,7 @@ void DOFManager::setConnManager(const Teuchos::RCP<ConnManager> & connMngr, MPI_
+     //We must also initialize vectors for FP associations.
+   }
+   blockToAssociatedFP_.resize(blockOrder_.size());
+-  communicator_ = Teuchos::rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(mpiComm)));
++  communicator_ = std::move(comm);
+ }
+ 
+ ///////////////////////////////////////////////////////////////////////////////
+diff --git a/packages/panzer/dof-mgr/src/Panzer_DOFManager.hpp b/packages/panzer/dof-mgr/src/Panzer_DOFManager.hpp
+index 10018d7e139..9e8883b512b 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_DOFManager.hpp
++++ b/packages/panzer/dof-mgr/src/Panzer_DOFManager.hpp
+@@ -75,10 +75,10 @@ public:
+     * objects. This is equivalent to calling the default constructor and
+     * then "setConnManager(...)" routine.
+     */
+-  DOFManager(const Teuchos::RCP<ConnManager> & connMngr, MPI_Comm mpiComm);
++  DOFManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t mpiComm);
+ 
+   //! Adds a Connection Manager that will be associated with this DOFManager.
+-  void setConnManager(const Teuchos::RCP<ConnManager> & connMngr, MPI_Comm mpiComm);
++  void setConnManager(const Teuchos::RCP<ConnManager> & connMngr, teuchos_comm_t mpiComm);
+ 
+   Teuchos::RCP<const ConnManager> getConnManager() const
+   { return connMngr_; }
+@@ -234,8 +234,7 @@ public:
+ 
+   int getFieldNum(const std::string & string) const;
+ 
+-  Teuchos::RCP<Teuchos::Comm<int> > getComm() const
+-  { return communicator_; }
++  teuchos_comm_t getComm() const { return communicator_; }
+ 
+   Teuchos::RCP<const FieldPattern> getGeometricFieldPattern() const
+   { return ga_fp_; }
+@@ -409,7 +408,7 @@ protected:
+   void buildLocalIdsFromOwnedAndGhostedElements();
+ 
+   Teuchos::RCP<ConnManager> connMngr_;
+-  Teuchos::RCP<Teuchos::Comm<int> > communicator_;
++  teuchos_comm_t communicator_;
+ 
+   //Please note: AID=absolute ID. This is an attempt to remember that
+   // fieldPatterns_ is unchanging storage for FPs.
+diff --git a/packages/panzer/dof-mgr/src/Panzer_Filtered_GlobalIndexer.hpp b/packages/panzer/dof-mgr/src/Panzer_Filtered_GlobalIndexer.hpp
+index fb057f7147b..6b5e0ae4764 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_Filtered_GlobalIndexer.hpp
++++ b/packages/panzer/dof-mgr/src/Panzer_Filtered_GlobalIndexer.hpp
+@@ -210,8 +210,7 @@ public:
+    
+    virtual ~Filtered_GlobalIndexer() {}
+ 
+-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const 
+-   { return base_->getComm(); }
++   virtual teuchos_comm_t getComm() const { return base_->getComm(); }
+ 
+    virtual int getNumFields() const 
+    { return base_->getNumFields(); }
+diff --git a/packages/panzer/dof-mgr/src/Panzer_GlobalIndexer.hpp b/packages/panzer/dof-mgr/src/Panzer_GlobalIndexer.hpp
+index 20fce2cbe51..f0b2dfa234d 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_GlobalIndexer.hpp
++++ b/packages/panzer/dof-mgr/src/Panzer_GlobalIndexer.hpp
+@@ -57,13 +57,16 @@ namespace panzer {
+ class ConnManager;
+ 
+ class GlobalIndexer {
++public:
++    //! Type of MPI communicator used.
++    using teuchos_comm_t = Teuchos::RCP<const Teuchos::Comm<int> >;
+ public:
+    //! Pure virtual destructor: prevents warnings with inline empty implementation 
+   virtual ~GlobalIndexer() {}
+ 
+    /** Get communicator associated with this global indexer.
+      */
+-   virtual Teuchos::RCP<Teuchos::Comm<int> > getComm() const = 0;
++   virtual teuchos_comm_t getComm() const = 0;
+ 
+    /** Get the number of fields (total) stored by this DOF manager
+      */
+diff --git a/packages/panzer/dof-mgr/test/cartesian_topology/CartesianConnManager.cpp b/packages/panzer/dof-mgr/test/cartesian_topology/CartesianConnManager.cpp
+index 3a3cf5f79d6..7a21aff8919 100644
+--- a/packages/panzer/dof-mgr/test/cartesian_topology/CartesianConnManager.cpp
++++ b/packages/panzer/dof-mgr/test/cartesian_topology/CartesianConnManager.cpp
+@@ -53,7 +53,7 @@ namespace panzer {
+ namespace unit_test {
+ 
+ void CartesianConnManager::
+-initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny,
++initialize(const teuchos_comm_t::element_type& comm,GlobalOrdinal nx, GlobalOrdinal ny,
+                                               int px, int py,
+                                               int bx, int by,
+                                               const shards::CellTopology elemTopo)
+@@ -157,7 +157,7 @@ initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny
+ }
+ 
+ void CartesianConnManager::
+-initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny, GlobalOrdinal nz,
++initialize(const teuchos_comm_t::element_type & comm,GlobalOrdinal nx, GlobalOrdinal ny, GlobalOrdinal nz,
+                                               int px, int py,int pz,
+                                               int bx, int by,int bz,
+                                               const shards::CellTopology elemTopo)
+diff --git a/packages/panzer/dof-mgr/test/cartesian_topology/CartesianConnManager.hpp b/packages/panzer/dof-mgr/test/cartesian_topology/CartesianConnManager.hpp
+index 1115b0c2a21..cae420ddcf4 100644
+--- a/packages/panzer/dof-mgr/test/cartesian_topology/CartesianConnManager.hpp
++++ b/packages/panzer/dof-mgr/test/cartesian_topology/CartesianConnManager.hpp
+@@ -81,6 +81,9 @@ namespace unit_test {
+   * where each brick element is split into 2 triangles
+   */
+ class CartesianConnManager : public virtual panzer::ConnManager {
++public:
++    //! Type of MPI communicator used.
++    using teuchos_comm_t = typename ConnManager::teuchos_comm_t;
+ public:
+ 
+    // A utility structure for storing triplet indices
+@@ -106,7 +109,7 @@ public:
+      * \param[in] by Number of blocks in the y direction
+      * \param[in] elemTopo Topology of the mesh element (either Quadrilateral<4> or Triangular<3>)
+      */
+-   void initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny,
++   void initialize(const teuchos_comm_t::element_type & comm,GlobalOrdinal nx, GlobalOrdinal ny,
+                    int px, int py,
+                    int bx, int by,
+                    const shards::CellTopology elemTopo=shards::getCellTopologyData<shards::Quadrilateral<4>>());
+@@ -125,7 +128,7 @@ public:
+      * \param[in] bz Number of blocks in the z direction
+      * \param[in] elemTopo Topology of the mesh element (either Hexahedron<8> or Tetrahedron<4>)
+      */
+-   void initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny, GlobalOrdinal nz,
++   void initialize(const teuchos_comm_t::element_type & comm,GlobalOrdinal nx, GlobalOrdinal ny, GlobalOrdinal nz,
+                    int px, int py, int pz,
+                    int bx, int by, int bz,
+                    const shards::CellTopology elemTopo=shards::getCellTopologyData<shards::Hexahedron<8>>());
+diff --git a/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr.cpp b/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr.cpp
+index 823c6b2fb25..754b3e7c195 100644
+--- a/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr.cpp
++++ b/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr.cpp
+@@ -44,7 +44,7 @@
+ #include <Teuchos_UnitTestHarness.hpp>
+ #include <Teuchos_RCP.hpp>
+ #include <Teuchos_TimeMonitor.hpp>
+-#include <Teuchos_DefaultMpiComm.hpp>
++#include <Teuchos_DefaultComm.hpp>
+ #include <Teuchos_CommHelpers.hpp>
+ 
+ // #include "Kokkos_DynRankView.hpp"
+@@ -99,14 +99,10 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr, threed)
+   typedef panzer::DOFManager<int,panzer::GlobalOrdinal> DOFManager;
+ 
+   // build global (or serial communicator)
+-  #ifdef HAVE_MPI
+-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
+-  #else
+-    THIS_REALLY_DOES_NOT_WORK
+-  #endif
++  DOFManager::teuchos_comm_t comm = DefaultComm<int>::getComm();
+ 
+-  int np = comm.getSize(); // number of processors
+-  int rank = comm.getRank(); // processor rank
++  int np   = comm->getSize(); // number of processors
++  int rank = comm->getRank(); // processor rank
+ 
+   // mesh description
+   panzer::GlobalOrdinal nx = 10, ny = 7, nz = 4;
+@@ -122,11 +118,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr, threed)
+ 
+   // build the topology
+   RCP<CCM> connManager = rcp(new CCM);
+-  connManager->initialize(comm,nx,ny,nz,px,py,pz,bx,by,bz);
++  connManager->initialize(*comm,nx,ny,nz,px,py,pz,bx,by,bz);
+ 
+   // build the dof manager, and assocaite with the topology
+-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
++  auto dofManager = Teuchos::make_rcp<DOFManager>();
++  dofManager->setConnManager(connManager, comm);
+ 
+   // add TEMPERATURE field to all element blocks (MHD and solid)
+   dofManager->addField("TEMPERATURE",pattern_T);
+@@ -306,13 +302,13 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr, threed)
+ 
+     // send left
+     if(rank!=0) {
+-      Teuchos::send(comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
++      Teuchos::send(*comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
+     }
+ 
+     // recieve right, check 
+     if(rank!=np-1) {
+       std::vector<panzer::GlobalOrdinal> gid_remote(gid_sub_r.size(),-1);
+-      Teuchos::receive(comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
++      Teuchos::receive(*comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
+ 
+       for(std::size_t i=0;i<gid_sub_r.size();i++)
+         TEST_EQUALITY(gid_sub_r[i],gid_remote[i]);
+diff --git a/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_DG.cpp b/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_DG.cpp
+index 7e8ba683c86..7ff97c45cb0 100644
+--- a/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_DG.cpp
++++ b/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_DG.cpp
+@@ -44,7 +44,7 @@
+ #include <Teuchos_UnitTestHarness.hpp>
+ #include <Teuchos_RCP.hpp>
+ #include <Teuchos_TimeMonitor.hpp>
+-#include <Teuchos_DefaultMpiComm.hpp>
++#include <Teuchos_DefaultComm.hpp>
+ #include <Teuchos_CommHelpers.hpp>
+ 
+ #include "Kokkos_Core.hpp"
+@@ -100,9 +100,11 @@ std::string getElementBlock(const Triplet & element,
+ 
+ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DG, basic)
+ {
+-  Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);    
+-  int np = comm.getSize();
+-  int rank = comm.getRank();
++  using DOFManager = panzer::DOFManager;
++  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
++
++  int np   = comm->getSize();
++  int rank = comm->getRank();
+ 
+   const panzer::GlobalOrdinal nx = 12, ny = 5, nz = 3;
+   const int px = np, py = 1, pz = 1;
+@@ -117,12 +119,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DG, basic)
+   // build the topology
+   using CCM = CartesianConnManager;
+   RCP<CCM> connManager = rcp(new CCM);
+-  connManager->initialize(comm,nx,ny,nz,px,py,pz,bx,by,bz);
++  connManager->initialize(*comm,nx,ny,nz,px,py,pz,bx,by,bz);
+ 
+   // build the dof manager, and assocaite with the topology
+-  using DOFManager = panzer::DOFManager;
+-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
++  auto dofManager = Teuchos::make_rcp<DOFManager>();
++  dofManager->setConnManager(connManager, comm);
+ 
+   using Basis = Intrepid2::Basis<PHX::Device,double,double>;
+   
+@@ -464,13 +465,13 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DG, basic)
+ 
+     // send left
+     if(rank!=0) {
+-      Teuchos::send(comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
++      Teuchos::send(*comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
+     }
+ 
+     // recieve right, check 
+     if(rank!=np-1) {
+       std::vector<panzer::GlobalOrdinal> gid_remote(gid_sub_r.size(),-1);
+-      Teuchos::receive(comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
++      Teuchos::receive(*comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
+ 
+       for(std::size_t i=0;i<gid_sub_r.size();i++)
+         TEST_EQUALITY(gid_sub_r[i],gid_remote[i]);
+diff --git a/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_DynRankView.cpp b/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_DynRankView.cpp
+index e9f487c66c4..437a404e0d9 100644
+--- a/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_DynRankView.cpp
++++ b/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_DynRankView.cpp
+@@ -44,7 +44,7 @@
+ #include <Teuchos_UnitTestHarness.hpp>
+ #include <Teuchos_RCP.hpp>
+ #include <Teuchos_TimeMonitor.hpp>
+-#include <Teuchos_DefaultMpiComm.hpp>
++#include <Teuchos_DefaultComm.hpp>
+ #include <Teuchos_CommHelpers.hpp>
+ 
+ #include "Kokkos_Core.hpp"
+@@ -97,15 +97,10 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DynRankView, threed)
+   using CCM = CartesianConnManager;
+   using DOFManager = panzer::DOFManager;
+ 
+-  // build global (or serial communicator)
+-  #ifdef HAVE_MPI
+-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
+-  #else
+-    THIS_REALLY_DOES_NOT_WORK
+-  #endif
++  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+ 
+-  int np = comm.getSize(); // number of processors
+-  int rank = comm.getRank(); // processor rank
++  int np   = comm->getSize(); // number of processors
++  int rank = comm->getRank(); // processor rank
+ 
+   // mesh description
+   panzer::GlobalOrdinal nx = 10, ny = 7, nz = 4;
+@@ -121,11 +116,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DynRankView, threed)
+ 
+   // build the topology
+   RCP<CCM> connManager = rcp(new CCM);
+-  connManager->initialize(comm,nx,ny,nz,px,py,pz,bx,by,bz);
++  connManager->initialize(*comm,nx,ny,nz,px,py,pz,bx,by,bz);
+ 
+   // build the dof manager, and assocaite with the topology
+-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
++  auto dofManager = Teuchos::make_rcp<DOFManager>();
++  dofManager->setConnManager(connManager, comm);
+ 
+   // add TEMPERATURE field to all element blocks (MHD and solid)
+   dofManager->addField("TEMPERATURE",pattern_T);
+@@ -305,13 +300,13 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_DynRankView, threed)
+ 
+     // send left
+     if(rank!=0) {
+-      Teuchos::send(comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
++      Teuchos::send(*comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
+     }
+ 
+     // recieve right, check 
+     if(rank!=np-1) {
+       std::vector<panzer::GlobalOrdinal> gid_remote(gid_sub_r.size(),-1);
+-      Teuchos::receive(comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
++      Teuchos::receive(*comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
+ 
+       for(std::size_t i=0;i<gid_sub_r.size();i++)
+         TEST_EQUALITY(gid_sub_r[i],gid_remote[i]);
+diff --git a/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_HighOrder.cpp b/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_HighOrder.cpp
+index 08f5490b7db..6448e80247f 100644
+--- a/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_HighOrder.cpp
++++ b/packages/panzer/dof-mgr/test/cartesian_topology/tCartesianDOFMgr_HighOrder.cpp
+@@ -44,7 +44,7 @@
+ #include <Teuchos_UnitTestHarness.hpp>
+ #include <Teuchos_RCP.hpp>
+ #include <Teuchos_TimeMonitor.hpp>
+-#include <Teuchos_DefaultMpiComm.hpp>
++#include <Teuchos_DefaultComm.hpp>
+ #include <Teuchos_CommHelpers.hpp>
+ 
+ #include "Kokkos_Core.hpp"
+@@ -93,13 +93,9 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, ho_gid_values)
+   typedef panzer::DOFManager DOFManager;
+ 
+   // build global (or serial communicator)
+-  #ifdef HAVE_MPI
+-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
+-  #else
+-    THIS_REALLY_DOES_NOT_WORK
+-  #endif
++  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+ 
+-  int np = comm.getSize(); // number of processors
++  int np = comm->getSize(); // number of processors
+   //int rank = comm.getRank(); // processor rank
+ 
+   // mesh description
+@@ -115,11 +111,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, ho_gid_values)
+ 
+   // build the topology
+   RCP<CCM> connManager = rcp(new CCM);
+-  connManager->initialize(comm,nx,ny,px,py,bx,by);
++  connManager->initialize(*comm,nx,ny,px,py,bx,by);
+ 
+   // build the dof manager, and assocaite with the topology
+-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
++  auto dofManager = Teuchos::make_rcp<DOFManager>();
++  dofManager->setConnManager(connManager, comm);
+ 
+   // add velocity (U) and PRESSURE fields to the MHD element block
+   dofManager->addField("eblock-0_0","U",pattern_U);
+@@ -165,7 +161,7 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, ho_gid_values)
+ 
+   int count = Teuchos::as<int>(s_indices.size());
+   int totalCount = 0;
+-  Teuchos::reduceAll(comm,Teuchos::REDUCE_SUM,1,&count,&totalCount);
++  Teuchos::reduceAll(*comm,Teuchos::REDUCE_SUM,1,&count,&totalCount);
+ 
+   TEST_EQUALITY(totalCount,(nx*poly_U+1)*(ny*poly_U+1)+(nx*poly_P+1)*(ny*poly_P+1))
+ 
+@@ -185,13 +181,9 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, gid_values)
+   using DOFManager = panzer::DOFManager;
+ 
+   // build global (or serial communicator)
+-  #ifdef HAVE_MPI
+-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
+-  #else
+-    THIS_REALLY_DOES_NOT_WORK
+-  #endif
++  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+ 
+-  int np = comm.getSize(); // number of processors
++  int np = comm->getSize(); // number of processors
+   //int rank = comm.getRank(); // processor rank
+ 
+   // mesh description
+@@ -207,11 +199,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, gid_values)
+ 
+   // build the topology
+   RCP<CCM> connManager = rcp(new CCM);
+-  connManager->initialize(comm,nx,ny,px,py,bx,by);
++  connManager->initialize(*comm,nx,ny,px,py,bx,by);
+ 
+   // build the dof manager, and assocaite with the topology
+-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
++  auto dofManager = Teuchos::make_rcp<DOFManager>();
++  dofManager->setConnManager(connManager, comm);
+ 
+   // add velocity (U) and PRESSURE fields to the MHD element block
+   dofManager->addField("eblock-0_0","UX",pattern_U);
+@@ -283,15 +275,10 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, quad2d)
+   using CCM = CartesianConnManager;
+   using DOFManager = panzer::DOFManager;
+ 
+-  // build global (or serial communicator)
+-  #ifdef HAVE_MPI
+-    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
+-  #else
+-    THIS_REALLY_DOES_NOT_WORK
+-  #endif
++  DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+ 
+-  int np = comm.getSize(); // number of processors
+-  int rank = comm.getRank(); // processor rank
++  int np   = comm->getSize(); // number of processors
++  int rank = comm->getRank(); // processor rank
+ 
+   // mesh description
+   panzer::GlobalOrdinal nx = 10, ny = 7;//, nz = 4;
+@@ -308,11 +295,11 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, quad2d)
+   
+   // build the topology
+   RCP<CCM> connManager = rcp(new CCM);
+-  connManager->initialize(comm,nx,ny,px,py,bx,by);
++  connManager->initialize(*comm,nx,ny,px,py,bx,by);
+ 
+   // build the dof manager, and assocaite with the topology
+-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+-  dofManager->setConnManager(connManager,*comm.getRawMpiComm());
++  auto dofManager = Teuchos::make_rcp<DOFManager>();
++  dofManager->setConnManager(connManager, comm);
+ 
+   // add TEMPERATURE field to all element blocks (MHD and solid)
+   dofManager->addField("TEMPERATURE",pattern_T);
+@@ -505,13 +492,13 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, quad2d)
+ 
+     // send left
+     if(rank!=0) {
+-      Teuchos::send(comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
++      Teuchos::send(*comm,Teuchos::as<int>(gid_sub_l.size()),&gid_sub_l[0],rank-1);
+     }
+ 
+     // recieve right, check 
+     if(rank!=np-1) {
+       std::vector<panzer::GlobalOrdinal> gid_remote(gid_sub_r.size(),-1);
+-      Teuchos::receive(comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
++      Teuchos::receive(*comm,rank+1,Teuchos::as<int>(gid_sub_r.size()),&gid_remote[0]);
+ 
+       for(std::size_t i=0;i<gid_sub_r.size();i++)
+         TEST_EQUALITY(gid_sub_r[i],gid_remote[i]);
+diff --git a/packages/panzer/dof-mgr/test/dofmngr_test/tBlockedDOFManager.cpp b/packages/panzer/dof-mgr/test/dofmngr_test/tBlockedDOFManager.cpp
+index f7dace4a2a4..bf9ab788b29 100644
+--- a/packages/panzer/dof-mgr/test/dofmngr_test/tBlockedDOFManager.cpp
++++ b/packages/panzer/dof-mgr/test/dofmngr_test/tBlockedDOFManager.cpp
+@@ -663,20 +663,16 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager_SimpleTests,validFieldOrder)
+ 
+ TEUCHOS_UNIT_TEST(tBlockedDOFManager,mergetests)
+ {
+-
+-   // build global (or serial communicator)
+-   #ifdef HAVE_MPI
+-      Teuchos::RCP<Epetra_Comm> eComm = Teuchos::rcp(new Epetra_MpiComm(MPI_COMM_WORLD));
+-   #else
+-      Teuchos::RCP<Epetra_Comm> eComm = Teuchos::rcp(new Epetra_SerialComm());
+-   #endif
++   // Get global MPI communicator (or serial if MPI is not enabled)
++   using dof_manager_t = panzer::DOFManager;
++   dof_manager_t::teuchos_comm_t comm = DefaultComm<int>::getComm();
+ 
+    using Teuchos::RCP;
+    using Teuchos::rcp;
+    using Teuchos::rcp_dynamic_cast;
+ 
+-   int myRank = eComm->MyPID();
+-   int numProc = eComm->NumProc();
++   int myRank  = comm->MyPID();
++   int numProc = comm->NumProc();
+ 
+    RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank,numProc));
+ 
+@@ -688,7 +684,7 @@ TEUCHOS_UNIT_TEST(tBlockedDOFManager,mergetests)
+    /////////////////////////////////////////////////////////////////////////
+    DOFManager dofManager[2]; 
+ 
+-   dofManager[0].setConnManager(connManager,MPI_COMM_WORLD);
++   dofManager[0].setConnManager(connManager,comm);
+    dofManager[0].addField("T",patternC1); // add it to all three blocks
+    dofManager[0].addField("block_0","Ux",patternC1);
+    dofManager[0].addField("block_0","Uy",patternC1);
+diff --git a/packages/panzer/dof-mgr/test/dofmngr_test/tFilteredUGI.cpp b/packages/panzer/dof-mgr/test/dofmngr_test/tFilteredUGI.cpp
+index 337d2f3f0c3..ae184e0f7d6 100644
+--- a/packages/panzer/dof-mgr/test/dofmngr_test/tFilteredUGI.cpp
++++ b/packages/panzer/dof-mgr/test/dofmngr_test/tFilteredUGI.cpp
+@@ -44,7 +44,7 @@
+ #include <Teuchos_UnitTestHarness.hpp>
+ #include <Teuchos_RCP.hpp>
+ #include <Teuchos_TimeMonitor.hpp>
+-#include <Teuchos_DefaultMpiComm.hpp>
++#include <Teuchos_DefaultComm.hpp>
+ 
+ #include <string>
+ #include <iostream>
+@@ -102,8 +102,8 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,equivalence_test)
+    int numProc = tComm->getSize();   
+ 
+    RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank,numProc));
+-   RCP<DOFManager> dofManager = rcp(new DOFManager); 
+-   dofManager->setConnManager(connManager,MPI_COMM_WORLD);
++   auto dofManager = Teuchos::make_rcp<DOFManager>(); 
++   dofManager->setConnManager(connManager, tComm);
+ 
+    RCP<const panzer::FieldPattern> patternC1 
+      = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space,double,double> >();
+@@ -189,8 +189,7 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,equivalence_test)
+ // this just excercises a bunch of functions
+ TEUCHOS_UNIT_TEST(tFilteredUGI,filtering)
+ {
+-   RCP<const Teuchos::MpiComm<int> > tComm 
+-     = rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(MPI_COMM_WORLD)));
++   panzer::DOFManager::teuchos_comm_t comm = Teuchos::DefaultComm<int>::getComm();
+ 
+    // panzer::pauseToAttach();
+ 
+@@ -198,12 +197,12 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,filtering)
+    using Teuchos::rcp;
+    using Teuchos::rcp_dynamic_cast;
+ 
+-   int myRank = tComm->getRank(); 
+-   int numProc = tComm->getSize(); 
++   int myRank  = comm->getRank(); 
++   int numProc = comm->getSize(); 
+ 
+    RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank,numProc));
+-   RCP<DOFManager> dofManager = rcp(new DOFManager); 
+-   dofManager->setConnManager(connManager,MPI_COMM_WORLD);
++   auto dofManager = Teuchos::make_rcp<DOFManager>(); 
++   dofManager->setConnManager(connManager, comm);
+ 
+    RCP<const panzer::FieldPattern> patternC1 
+      = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space,double,double> >();
+@@ -225,7 +224,7 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,filtering)
+    {
+      int mySize = Teuchos::as<int>(my_filtered.size());
+      std::vector<int> neighborSizes(numProc,0);
+-     Teuchos::gatherAll(*tComm,1,&mySize,Teuchos::as<int>(neighborSizes.size()),&neighborSizes[0]);
++     Teuchos::gatherAll(*comm,1,&mySize,Teuchos::as<int>(neighborSizes.size()),&neighborSizes[0]);
+ 
+      out << "MY SZ = " << my_filtered.size() << std::endl;
+      out << "SZ = " << neighborSizes[0] << std::endl;
+@@ -236,7 +235,7 @@ TEUCHOS_UNIT_TEST(tFilteredUGI,filtering)
+        totalSize += Teuchos::as<int>(neighborSizes[i]);
+ 
+      all_filtered.resize(totalSize);
+-     Teuchos::gatherAll(*tComm,mySize,&my_filtered[0],Teuchos::as<int>(totalSize),&all_filtered[0]);
++     Teuchos::gatherAll(*comm,mySize,&my_filtered[0],Teuchos::as<int>(totalSize),&all_filtered[0]);
+ 
+      out << "MY Filtered = ";
+      for(std::size_t i=0;i<my_filtered.size();i++)
+diff --git a/packages/panzer/dof-mgr/test/fe_assembly/test_fe_assembly_HEX.hpp b/packages/panzer/dof-mgr/test/fe_assembly/test_fe_assembly_HEX.hpp
+index 12a703ddc6a..022ea8cff54 100644
+--- a/packages/panzer/dof-mgr/test/fe_assembly/test_fe_assembly_HEX.hpp
++++ b/packages/panzer/dof-mgr/test/fe_assembly/test_fe_assembly_HEX.hpp
+@@ -82,6 +82,7 @@
+ #include "Panzer_GlobalIndexer.hpp"
+ #include "../cartesian_topology/CartesianConnManager.hpp"
+ 
++#include <Tpetra_Core.hpp>
+ #include <Tpetra_Export.hpp>
+ #include <Tpetra_Map.hpp>
+ #include <Tpetra_CrsGraph.hpp>
+@@ -256,7 +257,8 @@ int feAssemblyHex(int argc, char *argv[]) {
+ 
+ #define ConstructWithLabel(obj, ...) obj(#obj, __VA_ARGS__)
+ 
+-  Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
++  // Get the default MPI communicator. It will initialize MPI if needed.
++  const auto comm = Tpetra::getDefaultComm();
+ 
+   //output stream/file
+   Teuchos::RCP<Teuchos::FancyOStream> outStream;
+@@ -271,7 +273,7 @@ int feAssemblyHex(int argc, char *argv[]) {
+     local_ordinal_t nx = 2;
+     local_ordinal_t ny            = nx;
+     local_ordinal_t nz            = nx;
+-    int np   = comm.getSize(); // number of processors
++    int np   = comm->getSize(); // number of processors
+     int px = std::cbrt(np); while(np%px!=0) --px;
+     int py = std::sqrt(np/px); while(np%py!=0) --py;
+     int pz = np/(px*py);
+@@ -299,7 +301,7 @@ int feAssemblyHex(int argc, char *argv[]) {
+       errorFlag++;
+     }
+ 
+-    outStream = ((comm.getRank () == 0) && verbose) ?
++    outStream = ((comm->getRank () == 0) && verbose) ?
+       getFancyOStream(Teuchos::rcpFromRef (std::cout)) :
+       getFancyOStream(Teuchos::rcp (new Teuchos::oblackholestream ()));
+ 
+@@ -321,7 +323,7 @@ int feAssemblyHex(int argc, char *argv[]) {
+ 
+     // build the topology
+     auto connManager = Teuchos::rcp(new panzer::unit_test::CartesianConnManager);
+-    connManager->initialize(comm,
++    connManager->initialize(*comm,
+         global_ordinal_t(nx*px),
+         global_ordinal_t(ny*py),
+         global_ordinal_t(nz*pz),
+@@ -331,7 +333,7 @@ int feAssemblyHex(int argc, char *argv[]) {
+ 
+     // build the dof manager, and assocaite with the topology
+     auto dofManager = Teuchos::rcp(new panzer::DOFManager);
+-    dofManager->setConnManager(connManager,*comm.getRawMpiComm());
++    dofManager->setConnManager(connManager,comm);
+ 
+     // add solution field to the element block
+     Teuchos::RCP< Intrepid2::Basis<DeviceSpaceType, scalar_t,scalar_t> > basis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_HEX_Cn_FEM<DeviceSpaceType,scalar_t,scalar_t>(degree));
+@@ -340,7 +342,7 @@ int feAssemblyHex(int argc, char *argv[]) {
+     dofManager->addField("block-0_0_0",fePattern);
+ 
+     // try to get them all synced up
+-    comm.barrier();
++    comm->barrier();
+ 
+     dofManager->buildGlobalUnknowns();
+ 
+@@ -513,9 +515,9 @@ int feAssemblyHex(int argc, char *argv[]) {
+     auto globalIndexer = Teuchos::rcp_dynamic_cast<const panzer::GlobalIndexer >(dofManager);
+     std::vector<global_ordinal_t> ownedIndices, ownedAndGhostedIndices;
+     globalIndexer->getOwnedIndices(ownedIndices);
+-    Teuchos::RCP<const map_t> ownedMap = Teuchos::rcp(new map_t(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedIndices,0,Teuchos::rcpFromRef(comm)));
++    Teuchos::RCP<const map_t> ownedMap = Teuchos::make_rcp<map_t>(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedIndices,0,comm);
+     globalIndexer->getOwnedAndGhostedIndices(ownedAndGhostedIndices);
+-    Teuchos::RCP<const map_t> ownedAndGhostedMap = Teuchos::rcp(new const map_t(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedAndGhostedIndices,0,Teuchos::rcpFromRef(comm)));
++    Teuchos::RCP<const map_t> ownedAndGhostedMap = Teuchos::make_rcp<const map_t>(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedAndGhostedIndices,0,comm);
+ 
+      *outStream << "Total number of DoFs: " << ownedMap->getGlobalNumElements() << ", number of owned DoFs: " << ownedMap->getLocalNumElements() << "\n";
+ 
+@@ -695,9 +697,9 @@ int feAssemblyHex(int argc, char *argv[]) {
+   reportParams->set("YAML style", "spacious");
+   if ( timingsFile != "" ){
+     std::ofstream fout(timingsFile.c_str());
+-    Teuchos::TimeMonitor::report(Teuchos::rcpFromRef(comm).ptr(), fout, reportParams);
++    Teuchos::TimeMonitor::report(comm.ptr(), fout, reportParams);
+   } else {
+-    Teuchos::TimeMonitor::report(Teuchos::rcpFromRef(comm).ptr(), *outStream);
++    Teuchos::TimeMonitor::report(comm.ptr(), *outStream);
+   }
+ 
+   if (errorFlag != 0)
+diff --git a/packages/panzer/dof-mgr/test/fe_assembly/test_fe_projection.hpp b/packages/panzer/dof-mgr/test/fe_assembly/test_fe_projection.hpp
+index 6735ffdd673..e00ef5f3246 100644
+--- a/packages/panzer/dof-mgr/test/fe_assembly/test_fe_projection.hpp
++++ b/packages/panzer/dof-mgr/test/fe_assembly/test_fe_projection.hpp
+@@ -88,6 +88,7 @@
+ #include "Panzer_GlobalIndexer.hpp"
+ #include "../cartesian_topology/CartesianConnManager.hpp"
+ 
++#include <Tpetra_Core.hpp>
+ #include <Tpetra_Export.hpp>
+ #include <Tpetra_Map.hpp>
+ #include <Tpetra_CrsGraph.hpp>
+@@ -177,8 +178,8 @@ int feProjection(int argc, char *argv[]) {
+ 
+   int errorFlag = 0;
+ 
+-
+-  Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
++  // Get the default MPI communicator. It will initialize MPI if needed.
++  const auto comm = Tpetra::getDefaultComm();
+ 
+   //output stream/file
+   Teuchos::RCP<Teuchos::FancyOStream> outStream;
+@@ -195,7 +196,7 @@ int feProjection(int argc, char *argv[]) {
+     local_ordinal_t nx = 2;
+     local_ordinal_t ny            = nx;
+     local_ordinal_t nz            = (dim == 3) ? nx :1;
+-    int np   = comm.getSize(); // number of processors
++    int np   = comm->getSize(); // number of processors
+     int px = (dim == 2) ? std::sqrt(np) : std::cbrt(np); while(np%px!=0) --px;
+     int py = (dim == 2) ? np/px : std::sqrt(np/px); while(np%py!=0) --py;
+     int pz = np/(px*py);
+@@ -353,7 +354,7 @@ int feProjection(int argc, char *argv[]) {
+       errorFlag++;
+     }
+ 
+-    outStream = ((comm.getRank () == 0) && verbose) ?
++    outStream = ((comm->getRank () == 0) && verbose) ?
+         getFancyOStream(Teuchos::rcpFromRef (std::cout)) :
+         getFancyOStream(Teuchos::rcp (new Teuchos::oblackholestream ()));
+ 
+@@ -372,14 +373,14 @@ int feProjection(int argc, char *argv[]) {
+     // build the topology
+     auto connManager = Teuchos::rcp(new panzer::unit_test::CartesianConnManager);
+     if(dim == 3) {
+-      connManager->initialize(comm,
++      connManager->initialize(*comm,
+           global_ordinal_t(nx*px),
+           global_ordinal_t(ny*py),
+           global_ordinal_t(nz*pz),
+           px,py,pz,bx,by,bz,
+           *cellTopoPtr);
+     } else {
+-      connManager->initialize(comm,
++      connManager->initialize(*comm,
+           global_ordinal_t(nx*px),
+           global_ordinal_t(ny*py),
+           px,py,bx,by,
+@@ -390,18 +391,18 @@ int feProjection(int argc, char *argv[]) {
+     // *********************************** COMPUTE GLOBAL IDs OF VERTICES AND DOFs  ************************************
+ 
+     // build the dof manager, and assocaite with the topology
+-    auto dofManager = Teuchos::rcp(new panzer::DOFManager);
+-    dofManager->setConnManager(connManager,*comm.getRawMpiComm());
++    auto dofManager = Teuchos::make_rcp<panzer::DOFManager>();
++    dofManager->setConnManager(connManager,comm);
+ 
+     dofManager->setOrientationsRequired(basis->requireOrientation());
+ 
+     auto basisCardinality = basis->getCardinality();
+-    Teuchos::RCP<panzer::Intrepid2FieldPattern> fePattern = Teuchos::rcp(new panzer::Intrepid2FieldPattern(basis));
++    auto fePattern = Teuchos::make_rcp<panzer::Intrepid2FieldPattern>(basis);
+     std::string blockId = (dim == 2) ? "block-0_0" : "block-0_0_0";
+     dofManager->addField(blockId,fePattern);
+ 
+     // try to get them all synced up
+-    comm.barrier();
++    comm->barrier();
+ 
+     dofManager->buildGlobalUnknowns();
+ 
+@@ -510,7 +511,7 @@ int feProjection(int argc, char *argv[]) {
+     auto globalIndexer = Teuchos::rcp_dynamic_cast<const panzer::GlobalIndexer >(dofManager);
+     std::vector<global_ordinal_t> ownedIndices, ownedAndGhostedIndices;
+     globalIndexer->getOwnedIndices(ownedIndices);
+-    Teuchos::RCP<const map_t> ownedMap = Teuchos::rcp(new map_t(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedIndices,0,Teuchos::rcpFromRef(comm)));
++    Teuchos::RCP<const map_t> ownedMap = Teuchos::make_rcp<map_t>(Teuchos::OrdinalTraits<global_ordinal_t>::invalid(),ownedIndices,0,comm);
+ 
+     *outStream << "Total number of DoFs: " << ownedMap->getGlobalNumElements() << ", number of owned DoFs: " << ownedMap->getLocalNumElements() << "\n";
+ 
+@@ -778,7 +779,7 @@ int feProjection(int argc, char *argv[]) {
+     },norm2);
+ 
+     double totalNorm2=0;
+-    Teuchos::reduceAll(comm,Teuchos::REDUCE_SUM,1,&norm2,&totalNorm2);
++    Teuchos::reduceAll(*comm,Teuchos::REDUCE_SUM,1,&norm2,&totalNorm2);
+ 
+     *outStream << "L2 error: " << std::sqrt(totalNorm2) << std::endl;
+     if(std::sqrt(totalNorm2)>1e-12) {
+@@ -1077,9 +1078,9 @@ int feProjection(int argc, char *argv[]) {
+   reportParams->set("YAML style", "spacious");
+   if ( timingsFile != "" ){
+     std::ofstream fout(timingsFile.c_str());
+-    Teuchos::TimeMonitor::report(Teuchos::rcpFromRef(comm).ptr(), fout, reportParams);
++    Teuchos::TimeMonitor::report(comm.ptr(), fout, reportParams);
+   } else {
+-    Teuchos::TimeMonitor::report(Teuchos::rcpFromRef(comm).ptr(), *outStream);
++    Teuchos::TimeMonitor::report(comm.ptr(), *outStream);
+   }
+ 
+   if (errorFlag != 0)
+-- 
+2.34.1
+

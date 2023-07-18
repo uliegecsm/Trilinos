@@ -103,7 +103,7 @@ IF (Kokkos_ENABLE_OPENMP)
   # FIXME_TRILINOS Trilinos doesn't allow for Kokkos to use find_dependency
   # so we just append the flags here instead of linking with the OpenMP target.
   IF(KOKKOS_HAS_TRILINOS)
-    COMPILER_SPECIFIC_FLAGS(DEFAULT ${OpenMP_CXX_FLAGS})
+    #COMPILER_SPECIFIC_FLAGS(DEFAULT ${OpenMP_CXX_FLAGS})
   ELSE()
     KOKKOS_EXPORT_CMAKE_TPL(OpenMP REQUIRED)
   ENDIF()

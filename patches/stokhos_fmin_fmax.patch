@@ -1,0 +1,54 @@
+From 8a713baddc7c73908e02ec7db5356a7e75a7b5fc Mon Sep 17 00:00:00 2001
+From: Maarten Arnst <maarten.arnst@uliege.be>
+Date: Sat, 19 Nov 2022 22:07:39 +0100
+Subject: [PATCH] Add fmin and fmax stokhos mp vector specialisations.
+
+---
+ .../src/sacado/kokkos/Stokhos_Sacado_Kokkos_MathFunctions.hpp  | 2 ++
+ .../stokhos/src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp  | 2 ++
+ .../stokhos/test/UnitTest/Stokhos_SacadoMPVectorUnitTest.cpp   | 3 +++
+ 3 files changed, 7 insertions(+)
+
+diff --git a/packages/stokhos/src/sacado/kokkos/Stokhos_Sacado_Kokkos_MathFunctions.hpp b/packages/stokhos/src/sacado/kokkos/Stokhos_Sacado_Kokkos_MathFunctions.hpp
+index 3367c792dd7..62b285cafb3 100644
+--- a/packages/stokhos/src/sacado/kokkos/Stokhos_Sacado_Kokkos_MathFunctions.hpp
++++ b/packages/stokhos/src/sacado/kokkos/Stokhos_Sacado_Kokkos_MathFunctions.hpp
+@@ -181,6 +181,8 @@ BINARYFUNC_MACRO(atan2, Atan2Op)
+ BINARYFUNC_MACRO(pow, PowerOp)
+ BINARYFUNC_MACRO(max, MaxOp)
+ BINARYFUNC_MACRO(min, MinOp)
++BINARYFUNC_MACRO(fmax, FMaxOp)
++BINARYFUNC_MACRO(fmin, FMinOp)
+ 
+ #undef BINARYFUNC_MACRO
+ #undef BINARYFUNC_MACRO_SFS
+diff --git a/packages/stokhos/src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp b/packages/stokhos/src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp
+index f068644ee0a..c56f5be291b 100644
+--- a/packages/stokhos/src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp
++++ b/packages/stokhos/src/sacado/kokkos/vector/Sacado_MP_Vector_ops.hpp
+@@ -821,6 +821,8 @@ MP_BINARYOP_MACRO(min, MinOp, ::min, using std::min;)
+ MP_BINARYOP_MACRO(max, MaxOp, max, using std::max;)
+ MP_BINARYOP_MACRO(min, MinOp, min, using std::min;)
+ #endif
++MP_BINARYOP_MACRO(fmax, FMaxOp, fmax, using std::fmax;)
++MP_BINARYOP_MACRO(fmin, FMinOp, fmin, using std::fmin;)
+ 
+ #undef MP_BINARYOP_MACRO
+ 
+diff --git a/packages/stokhos/test/UnitTest/Stokhos_SacadoMPVectorUnitTest.cpp b/packages/stokhos/test/UnitTest/Stokhos_SacadoMPVectorUnitTest.cpp
+index 455e89d81bc..2241ae79ff7 100644
+--- a/packages/stokhos/test/UnitTest/Stokhos_SacadoMPVectorUnitTest.cpp
++++ b/packages/stokhos/test/UnitTest/Stokhos_SacadoMPVectorUnitTest.cpp
+@@ -538,6 +538,9 @@ struct UnitTestSetup {
+   /* Operators min and max are not supported for complex type. */                  \
+   BINARYFUNC_UNIT_TEST(VEC, SCALAR_T, max  , max  , using std::max  ;, Max)        \
+   BINARYFUNC_UNIT_TEST(VEC, SCALAR_T, min  , min  , using std::min  ;, Min)        \
++  /* Operators fmin and fmax are not supported for complex type. */                \
++  BINARYFUNC_UNIT_TEST(VEC, SCALAR_T, fmax , fmax , using std::fmax ;, FMax)       \
++  BINARYFUNC_UNIT_TEST(VEC, SCALAR_T, fmin , fmin , using std::fmin ;, FMin)       \
+   /* Ternary test uses 'operator<' that is not defined for complex type. */        \
+   TERNARY_UNIT_TEST(VEC, SCALAR_T)
+ 
+-- 
+2.25.1
+

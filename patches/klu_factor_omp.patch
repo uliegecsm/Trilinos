@@ -1,0 +1,43 @@
+From 565d6acca90f7dd027abf1b5163d42f9ed3b48e8 Mon Sep 17 00:00:00 2001
+From: Maarten Arnst <maarten.arnst@uliege.be>
+Date: Tue, 29 Nov 2022 15:39:23 +0100
+Subject: [PATCH] Patch for openmp incude to avoid compilation error on Mac.
+
+---
+ .../SuiteSparse/src/KLU/Source/trilinos_klu_factor.c          | 4 ++++
+ .../SuiteSparse/src/KLU/Source/trilinos_klu_tsolve.c          | 4 ++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/packages/common/auxiliarySoftware/SuiteSparse/src/KLU/Source/trilinos_klu_factor.c b/packages/common/auxiliarySoftware/SuiteSparse/src/KLU/Source/trilinos_klu_factor.c
+index 36ca5e0ef51..6237d193b5f 100644
+--- a/packages/common/auxiliarySoftware/SuiteSparse/src/KLU/Source/trilinos_klu_factor.c
++++ b/packages/common/auxiliarySoftware/SuiteSparse/src/KLU/Source/trilinos_klu_factor.c
+@@ -9,6 +9,10 @@
+ #include "TrilinosSS_config.h"
+ #include "trilinos_klu_internal.h"
+ 
++#ifdef TRILINOSSS_HAVE_OMP
++        #include "omp.h"
++#endif // TRILINOSSS_HAVE_OMP
++
+ /* ========================================================================== */
+ /* === KLU_factor2 ========================================================== */
+ /* ========================================================================== */
+diff --git a/packages/common/auxiliarySoftware/SuiteSparse/src/KLU/Source/trilinos_klu_tsolve.c b/packages/common/auxiliarySoftware/SuiteSparse/src/KLU/Source/trilinos_klu_tsolve.c
+index 780f7a9f0e0..2a374d54c86 100644
+--- a/packages/common/auxiliarySoftware/SuiteSparse/src/KLU/Source/trilinos_klu_tsolve.c
++++ b/packages/common/auxiliarySoftware/SuiteSparse/src/KLU/Source/trilinos_klu_tsolve.c
+@@ -12,6 +12,10 @@
+ #include "TrilinosSS_config.h"
+ #include "trilinos_klu_internal.h"
+ 
++#ifdef TRILINOSSS_HAVE_OMP
++        #include "omp.h"
++#endif // TRILINOSSS_HAVE_OMP
++
+ Int TRILINOS_KLU_tsolve
+ (
+     /* inputs, not modified */
+-- 
+2.32.0 (Apple Git-132)
+

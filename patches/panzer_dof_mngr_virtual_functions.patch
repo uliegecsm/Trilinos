@@ -1,0 +1,194 @@
+From 2d1ce0b14ff2f6cb9121013938c165b3d652d290 Mon Sep 17 00:00:00 2001
+From: Maarten Arnst <maarten.arnst@uliege.be>
+Date: Sun, 4 Jun 2023 14:19:47 +0200
+Subject: [PATCH] Make functions virtual in Panzer_DOFManager.
+
+---
+ .../panzer/dof-mgr/src/Panzer_DOFManager.cpp  | 17 +++++------
+ .../panzer/dof-mgr/src/Panzer_DOFManager.hpp  | 13 ++++----
+ .../src/Panzer_DOFManager_Functors.hpp        | 30 +++++++++++--------
+ 3 files changed, 33 insertions(+), 27 deletions(-)
+
+diff --git a/packages/panzer/dof-mgr/src/Panzer_DOFManager.cpp b/packages/panzer/dof-mgr/src/Panzer_DOFManager.cpp
+index acb3f756364..96d48fa1220 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_DOFManager.cpp
++++ b/packages/panzer/dof-mgr/src/Panzer_DOFManager.cpp
+@@ -466,7 +466,7 @@ void DOFManager::buildGlobalUnknowns()
+   connMngr_->buildConnectivity(*aggFieldPattern);
+ 
+   // using new geometric pattern, build global unknowns
+-  buildGlobalUnknowns(aggFieldPattern);
++  this->buildGlobalUnknowns(aggFieldPattern);
+ }
+ 
+ ///////////////////////////////////////////////////////////////////////////////
+@@ -512,13 +512,13 @@ void DOFManager::buildGlobalUnknowns(const Teuchos::RCP<const FieldPattern> & ge
+   ElementBlockAccess ownedAccess(true,connMngr_);
+ 
+   // INPUT: To the algorithm in the GUN paper
+-  RCP<MultiVector> tagged_overlap_mv = buildTaggedMultiVector(ownedAccess);
++  RCP<MultiVector> tagged_overlap_mv = this->buildTaggedMultiVector(ownedAccess);
+   RCP<const Map> overlap_map   = tagged_overlap_mv->getMap();
+ 
+   RCP<MultiVector> overlap_mv = Tpetra::createMultiVector<panzer::GlobalOrdinal>(overlap_map,(size_t)numFields_);
+ 
+   // call the GUN paper algorithm
+-  auto non_overlap_pair = buildGlobalUnknowns_GUN(*tagged_overlap_mv,*overlap_mv);
++  auto non_overlap_pair = this->buildGlobalUnknowns_GUN(*tagged_overlap_mv,*overlap_mv);
+   RCP<MultiVector> non_overlap_mv = non_overlap_pair.first;
+   RCP<MultiVector> tagged_non_overlap_mv = non_overlap_pair.second;
+   RCP<const Map> non_overlap_map = non_overlap_mv->getMap();
+@@ -529,7 +529,7 @@ void DOFManager::buildGlobalUnknowns(const Teuchos::RCP<const FieldPattern> & ge
+ 
+   // this bit of code takes the uniquely assigned GIDs and spreads them
+   // out for processing by local element ID
+-  fillGIDsFromOverlappedMV(ownedAccess,elementGIDs_,*overlap_map,*overlap_mv);
++  this->fillGIDsFromOverlappedMV(ownedAccess,elementGIDs_,*overlap_map,*overlap_mv);
+ 
+   // if neighbor unknowns are required, then make sure they are included
+   // in the elementGIDs_
+@@ -537,7 +537,7 @@ void DOFManager::buildGlobalUnknowns(const Teuchos::RCP<const FieldPattern> & ge
+                        // neighbor processors
+     ElementBlockAccess neighborAccess(false,connMngr_);
+     RCP<const Map> overlap_map_neighbor =
+-      buildOverlapMapFromElements(neighborAccess);
++      this->buildOverlapMapFromElements(neighborAccess);
+ 
+     // Export e(overlap_map_neighbor,non_overlap_map);
+     Import imp_neighbor(non_overlap_map,overlap_map_neighbor);
+@@ -549,7 +549,7 @@ void DOFManager::buildGlobalUnknowns(const Teuchos::RCP<const FieldPattern> & ge
+     overlap_mv_neighbor->doImport(*non_overlap_mv, imp_neighbor,
+       Tpetra::REPLACE);
+ 
+-    fillGIDsFromOverlappedMV(neighborAccess, elementGIDs_,
++    this->fillGIDsFromOverlappedMV(neighborAccess, elementGIDs_,
+       *overlap_map_neighbor, *overlap_mv_neighbor);
+   }
+ 
+@@ -794,8 +794,7 @@ DOFManager::buildGlobalUnknowns_GUN(const Tpetra::MultiVector<panzer::GlobalOrdi
+   {
+     PANZER_FUNC_TIME_MONITOR_DIFF("panzer::DOFManager::buildGlobalUnknowns_GUN::line_07-09 local_count",GUN07_09);
+     auto values = non_overlap_mv->getLocalViewDevice(Tpetra::Access::ReadOnly);
+-    auto mv_size = values.extent(0);
+-    Kokkos::parallel_reduce(mv_size,panzer::dof_functors::SumRank2<panzer::GlobalOrdinal,decltype(values)>(values),localsum);
++    panzer::dof_functors::SumRank2<panzer::GlobalOrdinal, decltype(values)>{values}.apply(localsum);
+   }
+ 
+  /* 11. Create a map using local sums to generate final GIDs.
+@@ -906,7 +905,7 @@ DOFManager::buildTaggedMultiVector(const ElementBlockAccess & ownedAccess)
+     }
+   }
+ 
+-  RCP<const Map> overlapmap       = buildOverlapMapFromElements(ownedAccess);
++  RCP<const Map> overlapmap       = this->buildOverlapMapFromElements(ownedAccess);
+ 
+   // LINE 22: In the GUN paper...the overlap_mv is reused for the tagged multivector.
+   //          This is a bit of a practical abuse of the algorithm presented in the paper.
+diff --git a/packages/panzer/dof-mgr/src/Panzer_DOFManager.hpp b/packages/panzer/dof-mgr/src/Panzer_DOFManager.hpp
+index 8f1ab581516..ac32cbf59e0 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_DOFManager.hpp
++++ b/packages/panzer/dof-mgr/src/Panzer_DOFManager.hpp
+@@ -227,10 +227,10 @@ public:
+   void getElementGIDs(panzer::LocalOrdinal localElementID, std::vector<panzer::GlobalOrdinal> & gids, const std::string & blockIdHint="") const;
+ 
+   //! builds the global unknowns array
+-  void buildGlobalUnknowns();
++  virtual void buildGlobalUnknowns();
+ 
+   //! builds the global unknowns array
+-  void buildGlobalUnknowns(const Teuchos::RCP<const FieldPattern> & geomPattern);
++  virtual void buildGlobalUnknowns(const Teuchos::RCP<const FieldPattern> & geomPattern);
+ 
+   int getFieldNum(const std::string & string) const;
+ 
+@@ -363,6 +363,7 @@ protected:
+     * and the owned element blocks.
+     */
+   class ElementBlockAccess {
++  public:
+     bool useOwned_;
+     Teuchos::RCP<const ConnManager> connMngr_;
+   public:
+@@ -382,13 +383,13 @@ protected:
+     * This map is used to construct the GIDs, and also to communicate the used
+     * GIDs. (this is steps 1 and 2)
+     */
+-  Teuchos::RCP<const Tpetra::Map<panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> >
++  virtual Teuchos::RCP<const Tpetra::Map<panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> >
+   buildOverlapMapFromElements(const ElementBlockAccess & access) const;
+ 
+   /** Build a tagged multivector (as defined in GUN paper) to use in global unknown numbering algorithm.
+     * Note that this is non-const. It does modify the <code>elementBlockGIDCount</code> member variable.
+     */
+-  Teuchos::RCP<Tpetra::MultiVector<panzer::GlobalOrdinal,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> >
++  virtual Teuchos::RCP<Tpetra::MultiVector<panzer::GlobalOrdinal,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> >
+   buildTaggedMultiVector(const ElementBlockAccess & access);
+ 
+   /** Build global unknowns using the algorithm in the Global Unknowns Numbering paper (GUN). This
+@@ -396,12 +397,12 @@ protected:
+     * tagged overlapped multi-vector (<code>overlap_mv</code>) is overwritten with the global IDs. Note
+     * fields on geometric entities that are not assigned a global ID are given an entry of -1.
+     */
+-  std::pair<Teuchos::RCP<Tpetra::MultiVector<panzer::GlobalOrdinal,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> >,
++  virtual std::pair<Teuchos::RCP<Tpetra::MultiVector<panzer::GlobalOrdinal,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> >,
+             Teuchos::RCP<Tpetra::MultiVector<panzer::GlobalOrdinal,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> > >
+   buildGlobalUnknowns_GUN(const Tpetra::MultiVector<panzer::GlobalOrdinal,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> & tagged_overlap_mv,
+                           Tpetra::MultiVector<panzer::GlobalOrdinal,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> & overlap_mv) const;
+ 
+-  void fillGIDsFromOverlappedMV(const ElementBlockAccess & access,
++  virtual void fillGIDsFromOverlappedMV(const ElementBlockAccess & access,
+                                 std::vector<std::vector< panzer::GlobalOrdinal > > & elementGIDs,
+                                 const Tpetra::Map<panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> & overlapmap,
+                                 const Tpetra::MultiVector<panzer::GlobalOrdinal,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> & overlap_mv) const;
+diff --git a/packages/panzer/dof-mgr/src/Panzer_DOFManager_Functors.hpp b/packages/panzer/dof-mgr/src/Panzer_DOFManager_Functors.hpp
+index 17ecbb4931f..4d3f75764bf 100644
+--- a/packages/panzer/dof-mgr/src/Panzer_DOFManager_Functors.hpp
++++ b/packages/panzer/dof-mgr/src/Panzer_DOFManager_Functors.hpp
+@@ -43,26 +43,32 @@
+ #ifndef __Panzer_DOFManager_Functors_hpp__
+ #define __Panzer_DOFManager_Functors_hpp__
+ 
++#include "Kokkos_Core.hpp"
+ #include "Phalanx_KokkosDeviceTypes.hpp"
+ 
+ namespace panzer {
+ namespace dof_functors {
+ 
+ //! Sums all entries of a Rank 2 Kokkos View 
+-template<typename GO, typename ArrayType>
++template <typename ReductionDataType, typename view_t>
+ struct SumRank2 {
+-  typedef GO value_type;
+-  typedef typename PHX::Device execution_space;
+-  
+-  ArrayType a_;
++    using policy_t = Kokkos::MDRangePolicy<typename view_t::execution_space, Kokkos::Rank<2>>;
+ 
+-  SumRank2(ArrayType a) : a_(a) {}
+-  
+-  KOKKOS_INLINE_FUNCTION
+-  void operator () (const unsigned int i, GO& lsum) const {
+-    for (unsigned int j=0; j < a_.extent(1); ++j)
+-      lsum += a_(i,j);
+-  }
++    const view_t values;
++
++    void apply(ReductionDataType& sum) const
++    {
++      const auto& values_ref = values;
++
++      Kokkos::parallel_reduce(
++        policy_t({0, 0}, {values.extent(0), values.extent(1)}),
++        KOKKOS_LAMBDA(const typename policy_t::index_type indexi, const typename policy_t::index_type indexj, ReductionDataType& local_sum)
++        {
++          local_sum += values_ref(indexi, indexj);
++        },
++        Kokkos::Sum<ReductionDataType>(sum)
++      );
++    }
+ };
+ 
+ }
+-- 
+2.39.2 (Apple Git-143)
+

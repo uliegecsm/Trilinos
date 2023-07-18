@@ -1,0 +1,75 @@
+{
+    "version" : 3,
+    "configurePresets" : [
+        {
+            "name"        : "AppleClang-OpenMP",
+            "inherits"    : "default",
+            "environment" : {
+                "MPI_BASE_DIR"      : "/opt/openmpi-4.1.4",
+                "OMP_BASE_DIR"      : "/opt/openmp",
+                "OMPI_CXX"          : "clang++",
+                "PATH"              : "$env{MPI_BASE_DIR}/bin:$penv{PATH}",
+                "DYLD_LIBRARY_PATH" : "$env{OMP_BASE_DIR}/lib:$penv{DYLD_LIBRARY_PATH}",
+                "TMPDIR"            : "/tmp"
+            },
+            "cacheVariables"    : {
+                // Basic configuration
+                "CMAKE_INSTALL_RPATH"          : {"type" : "PATH",   "value" : "/opt/Trilinos/${presetName}/lib"},
+                "CMAKE_MACOSX_RPATH"           : "ON",
+                // OpenMP configuration
+                "OpenMP_ROOT"                  : {"type" : "PATH",   "value" : "$env{OMP_BASE_DIR}"},
+                "CMAKE_C_FLAGS"                : {"type" : "STRING", "value" : "-I $env{OMP_BASE_DIR}/include -Xpreprocessor -fopenmp"},
+                "CMAKE_CXX_FLAGS"              : {"type" : "STRING", "value" : "-I $env{OMP_BASE_DIR}/include -Xpreprocessor -fopenmp"},
+                "CMAKE_EXE_LINKER_FLAGS"       : "-L $env{OMP_BASE_DIR}/lib -lomp",
+                "CMAKE_SHARED_LINKER_FLAGS"    : "-L $env{OMP_BASE_DIR}/lib -lomp",
+                // Thread binding configuration
+                "MPI_EXEC_POST_NUMPROCS_FLAGS" : {"type" : "STRING", "value" : ""},
+                // Disable HWLOC TPL
+                "TPL_ENABLE_HWLOC"              : "OFF",
+                // Disable Scotch
+                "TPL_ENABLE_Scotch"             : "OFF",
+                // Disable METIS
+                "TPL_ENABLE_METIS"              : "OFF"
+            }
+        },
+        {
+            "name"        : "AppleClang-OpenMP-amd64",
+            "inherits"    : ["AppleClang-OpenMP", "MKL-parallel"],
+            "environment" : {
+                "INTEL_ONEAPI_VERSION" : "2023.0.0",
+                "MKL_BASE_DIR"         : "/opt/intel/oneapi/mkl/$env{INTEL_ONEAPI_VERSION}"
+            },
+            "cacheVariables"    : {
+                "BLAS_LIBRARY_DIRS"   : {"type" : "PATH"  , "value" : "$env{MKL_BASE_DIR}/lib"},
+                "LAPACK_LIBRARY_DIRS" : {"type" : "PATH"  , "value" : "$env{MKL_BASE_DIR}/lib"},
+                "MKL_LIBRARY_DIRS"    : {"type" : "PATH"  , "value" : "$env{MKL_BASE_DIR}/lib"}
+            }
+        },
+        {
+            "name"        : "AppleClang-OpenMP-arm64",
+            "inherits"    : "AppleClang-OpenMP"
+        }
+    ],
+    "buildPresets" : [
+        {   "name"            : "AppleClang-OpenMP-amd64",
+            "configurePreset" : "AppleClang-OpenMP-amd64",
+            "inherits"        : "default"
+        },
+        {   "name"            : "AppleClang-OpenMP-arm64",
+            "configurePreset" : "AppleClang-OpenMP-arm64",
+            "inherits"        : "default"
+        }
+    ],
+    "testPresets" : [
+        {
+            "name"            : "AppleClang-OpenMP-amd64",
+            "configurePreset" : "AppleClang-OpenMP-amd64",
+            "inherits"        : "default"
+        },
+        {
+            "name"            : "AppleClang-OpenMP-arm64",
+            "configurePreset" : "AppleClang-OpenMP-arm64",
+            "inherits"        : "default"
+        }
+    ]
+}

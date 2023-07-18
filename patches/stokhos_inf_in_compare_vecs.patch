@@ -1,0 +1,42 @@
+From 81c99e651c4eaaac0bbb927719d0c09a700dddfa Mon Sep 17 00:00:00 2001
+From: Maarten Arnst <maarten.arnst@uliege.be>
+Date: Mon, 17 Jul 2023 18:11:18 +0200
+Subject: [PATCH] Handle case inf in comparevecs. Relax a bit tol in
+ SDMUtilsUnitTest.
+
+---
+ packages/stokhos/test/UnitTest/Stokhos_SDMUtilsUnitTest.cpp | 4 ++--
+ packages/stokhos/test/UnitTest/Stokhos_UnitTestHelpers.hpp  | 2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/packages/stokhos/test/UnitTest/Stokhos_SDMUtilsUnitTest.cpp b/packages/stokhos/test/UnitTest/Stokhos_SDMUtilsUnitTest.cpp
+index 60e775b1a34..8cc5fce82c2 100644
+--- a/packages/stokhos/test/UnitTest/Stokhos_SDMUtilsUnitTest.cpp
++++ b/packages/stokhos/test/UnitTest/Stokhos_SDMUtilsUnitTest.cpp
+@@ -60,8 +60,8 @@ namespace SDMUtilsUnitTest {
+   typedef void (*cpqr_func_type)(const SDM&, SDM&, SDM&, Teuchos::Array<ordinal_type>&);
+   typedef ordinal_type (*wcpqr_func_type)(const scalar_type&, const SDM&, const Teuchos::Array<scalar_type>&, SDM&, SDM&, Teuchos::Array<ordinal_type>&);
+   
+-  scalar_type rtol = 1.0e-12;
+-  scalar_type atol = 1.0e-12;
++  scalar_type rtol = 1.0e-11;
++  scalar_type atol = 1.0e-11;
+ 
+   void generateRandomMatrix(SDM& A, ordinal_type rank) {
+     ordinal_type m = A.numRows();
+diff --git a/packages/stokhos/test/UnitTest/Stokhos_UnitTestHelpers.hpp b/packages/stokhos/test/UnitTest/Stokhos_UnitTestHelpers.hpp
+index 6f2a3a4e7ca..015c5b24602 100644
+--- a/packages/stokhos/test/UnitTest/Stokhos_UnitTestHelpers.hpp
++++ b/packages/stokhos/test/UnitTest/Stokhos_UnitTestHelpers.hpp
+@@ -150,7 +150,7 @@ namespace Stokhos {
+       ValueType tol =
+         abs_tol + rel_tol*std::max(abs(a1.fastAccessCoeff(i)),
+                                    abs(a2.fastAccessCoeff(i)));
+-      if (err  > tol) {
++      if ( (err  > tol) && (err != 0.) ) {
+         out
+           <<"\nError, relErr("<<a1_name<<"["<<i<<"],"
+           <<a2_name<<"["<<i<<"]) = relErr("<<a1.coeff(i)<<","<<a2.coeff(i)
+-- 
+2.39.2 (Apple Git-143)
+
