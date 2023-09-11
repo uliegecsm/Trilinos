@@ -58,8 +58,8 @@
 #include <thrust/sort.h>
 #pragma pop_macro("_CubLog")
 #else
-#include <thrust/device_ptr.h>
-#include <thrust/sort.h>
+//#include <thrust/device_ptr.h>
+//#include <thrust/sort.h>
 #endif
 
 #pragma GCC diagnostic pop
@@ -709,19 +709,19 @@ sort(const ExecutionSpace&, const Kokkos::View<DataType, Properties...>& view) {
   std::sort(first, last);
 }
 
-#if defined(KOKKOS_ENABLE_CUDA)
-template <class DataType, class... Properties>
-void sort(const Cuda& space,
-          const Kokkos::View<DataType, Properties...>& view) {
-  if (view.extent(0) == 0) {
-    return;
-  }
-  const auto exec = thrust::cuda::par.on(space.cuda_stream());
-  auto first      = Experimental::begin(view);
-  auto last       = Experimental::end(view);
-  thrust::sort(exec, first, last);
-}
-#endif
+//#if defined(KOKKOS_ENABLE_CUDA)
+//template <class DataType, class... Properties>
+//void sort(const Cuda& space,
+//          const Kokkos::View<DataType, Properties...>& view) {
+//  if (view.extent(0) == 0) {
+//    return;
+//  }
+//  const auto exec = thrust::cuda::par.on(space.cuda_stream());
+//  auto first      = Experimental::begin(view);
+//  auto last       = Experimental::end(view);
+//  thrust::sort(exec, first, last);
+//}
+//#endif
 
 template <class ViewType>
 void sort(ViewType const& view) {
