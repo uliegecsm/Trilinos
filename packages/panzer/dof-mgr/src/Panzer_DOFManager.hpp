@@ -46,6 +46,9 @@
 
 #include <mpi.h>
 
+#include "Kokkos_Sort.hpp"
+#include "Kokkos_StdAlgorithms.hpp"
+
 #include "PanzerDofMgr_config.hpp"
 #include "Panzer_FieldPattern.hpp"
 #include "Panzer_FieldAggPattern.hpp"
@@ -67,7 +70,7 @@ namespace panzer {
 class DOFManager : public GlobalIndexer {
 public:
 
-  virtual ~DOFManager() {}
+  virtual ~DOFManager() = default;
 
   DOFManager();
 
@@ -358,6 +361,7 @@ protected:
     */
   std::size_t blockIdToIndex(const std::string & blockId) const;
 
+public:
   /** This small struct is a utility meant to unify access
     * to elements and allow better code reuse. Basically
     * it provides a switch between the neighbor element blocks
@@ -380,6 +384,7 @@ protected:
     }
   };
 
+protected:
   /** Build the overlapped communication map given an element access object.
     * This map is used to construct the GIDs, and also to communicate the used
     * GIDs. (this is steps 1 and 2)
@@ -450,6 +455,232 @@ protected:
   bool useNeighbors_;
 };
 
-}
+} // namespace panzer
+
+namespace panzer::Experimental
+{
+  template <typename LocalOrdinalType, typename GlobalOrdinalType, typename DeviceType>
+  class DOFManager : public ::panzer::DOFManager {
+    static_assert(std::is_same_v<LocalOrdinalType,  panzer::LocalOrdinal>);
+    static_assert(std::is_same_v<GlobalOrdinalType, panzer::GlobalOrdinal>);
+    static_assert(std::is_same_v<
+      Tpetra::KokkosCompat::KokkosDeviceWrapperNode<
+        typename DeviceType::execution_space,
+        typename DeviceType::memory_space
+      >,
+      panzer::TpetraNodeType
+    >);
+
+  public:
+    using local_ordinal_type = LocalOrdinalType;
+    using global_ordinal_type = GlobalOrdinalType;
+    using device_type = DeviceType;
+    using execution_space = typename device_type::execution_space;
+    using memory_space = typename device_type::memory_space;
+    using node_type = Tpetra::KokkosCompat::KokkosDeviceWrapperNode<execution_space, memory_space>;
+
+    using conn_manager_type = ::panzer::Experimental::ConnManager<local_ordinal_type, global_ordinal_type, device_type>;
+    using connectivity_device_view_type = typename conn_manager_type::connectivity_device_view_type;
+
+    using global_ordinal_device_view_type = Kokkos::View<global_ordinal_type*, memory_space>;
+    using global_ordinal_2d_device_view_type = Kokkos::View<global_ordinal_type**, memory_space>;
+    using global_ordinal_2d_host_view_type = typename global_ordinal_2d_device_view_type::HostMirror;
+
+    using map_type = Tpetra::Map<local_ordinal_type, global_ordinal_type, node_type>;
+    using multivector_type = Tpetra::MultiVector<global_ordinal_type, local_ordinal_type, global_ordinal_type, node_type>;
+
+  public:
+    /**
+     * @brief Overrides @c panzer::DOFManager::buildOverlapMapFromElements.
+     *
+     * This function creates a @c Tpetra::Map from local @c entyLId to global @c entyGId for the
+     * entities of the owned or ghost elements, on which the geometric field pattern
+     * locates a dof.
+     *
+     * The @c panzer::DOFManager implementation is a host implementation that first fills a @c std::set with
+     * the @c entyGId and then loops over its elements to @c push_back them into a @c std::vector.
+     *
+     * This overriding function is implemented by first filling a 1D array with the @c entyGId.
+     * In this 1D array, the @c entyGId are not unique. The duplicates are removed
+     * by using the @c Kokkos algorithms @c sort and @c unique. This 1D array is then passed to
+     * the constructor of @c Tpetra::Map.
+     */
+    Teuchos::RCP<const map_type> buildOverlapMapFromElements(const ElementBlockAccess& access) const override {
+      PANZER_FUNC_TIME_MONITOR("panzer::DOFManager::builderOverlapMapFromElements");
+
+      const auto connMngr = Teuchos::rcp_dynamic_cast<conn_manager_type>(this->connMngr_);
+
+      const auto numEntiesPerElmt = static_cast<size_t>(this->ga_fp_->numberIds());
+
+      size_t numElmts = 0;
+      for (size_t blockIdAsOrd = 0; blockIdAsOrd < this->blockOrder_.size(); ++blockIdAsOrd) {
+        numElmts += access.useOwned_
+          ? connMngr->getElementBlockDevice(this->blockOrder_[blockIdAsOrd]).size()
+          : connMngr->getNeighborElementBlockDevice(this->blockOrder_[blockIdAsOrd]).size();
+      }
+
+      global_ordinal_device_view_type overlap_view(
+          Kokkos::view_alloc("Global Ids of topological entities associated with at least one dof", Kokkos::WithoutInitializing),
+          numElmts * numEntiesPerElmt
+      );
+
+      const auto conn_d = connMngr->getConnectivityDevice();
+
+      local_ordinal_type offset = 0;
+      for (size_t blockIdAsOrd = 0; blockIdAsOrd < this->blockOrder_.size(); ++blockIdAsOrd) {
+        const auto elmtIds_d = access.useOwned_
+          ? connMngr->getElementBlockDevice(this->blockOrder_[blockIdAsOrd])
+          : connMngr->getNeighborElementBlockDevice(this->blockOrder_[blockIdAsOrd]);
+
+        Kokkos::parallel_for(
+          Kokkos::MDRangePolicy<execution_space, Kokkos::Rank<2>>({0, 0}, {elmtIds_d.size(), numEntiesPerElmt}),
+          KOKKOS_LAMBDA (const local_ordinal_type idx, const local_ordinal_type entyId) {
+            const auto elmtId = elmtIds_d(idx);
+            overlap_view(offset + idx * numEntiesPerElmt + entyId) = conn_d.rowConst(elmtId).operator()(entyId);
+          }
+        );
+        offset += elmtIds_d.size() * numEntiesPerElmt;
+      }
+
+      Kokkos::sort(overlap_view);
+
+      const auto iter = Kokkos::Experimental::unique(
+        execution_space{},
+        Kokkos::Experimental::begin(overlap_view),
+        Kokkos::Experimental::end(overlap_view)
+      );
+
+      Kokkos::resize(
+        overlap_view,
+        Kokkos::Experimental::distance(Kokkos::Experimental::begin(overlap_view), iter)
+      );
+
+      return Teuchos::make_rcp<map_type>(Tpetra::Details::OrdinalTraits<global_ordinal_type>::invalid(), overlap_view, 0, this->communicator_);
+    }
+
+    /**
+     * @brief Overrides @c panzer::DOFManager::buildTaggedMultiVector.
+     *
+     * This function creates a @c Tpetra::MultiVector that provides for each entity (@c entyGId, "multivector
+     * row") of the owned or ghost elements and each field (@c fieldId, "multivector column") the number of 
+     * dofs located on this entity for this field.
+     *
+     * The @c panzer::DOFManager implementation is a host implementation that repeats for each element
+     * the determination of how many dofs are located on each entity for each field.
+
+     * This function is implemented here by first determining for a single element how many dofs are
+     * located on each entity for each field and then replicating these numbers for all elements.
+     */
+    Teuchos::RCP<multivector_type> buildTaggedMultiVector(
+        const ElementBlockAccess &access
+    ) override {
+      TEUCHOS_TEST_FOR_EXCEPTION(!access.useOwned_, std::runtime_error, "access.useOwned_ must be true");
+
+      PANZER_FUNC_TIME_MONITOR("panzer::DOFManager::buildTaggedMultiVector");
+
+      const auto connMngr = Teuchos::rcp_dynamic_cast<conn_manager_type>(this->connMngr_);
+
+      // We will iterate through all the blocks, building a FieldAggPattern for each of them.
+      const auto numFields = static_cast<size_t>(this->numFields_);
+
+      for (size_t blockIdAsOrd = 0; blockIdAsOrd < this->blockOrder_.size(); ++blockIdAsOrd) {
+
+        std::vector<std::tuple<int, panzer::FieldType, Teuchos::RCP<const panzer::FieldPattern>>> faFptrnData;
+
+        for (size_t idx = 0; idx < numFields; ++idx) {
+          
+          // Check if the field is in the list of field patterns for this block
+          const auto fieldId = fieldAIDOrder_[idx];
+          
+          const auto iter = std::find(
+            this->blockToAssociatedFP_[blockIdAsOrd].cbegin(),
+            this->blockToAssociatedFP_[blockIdAsOrd].cend(),
+            fieldId
+          );
+
+          if (iter != blockToAssociatedFP_[blockIdAsOrd].cend()) { 
+            faFptrnData.push_back(std::make_tuple(
+                idx, this->fieldTypes_[fieldId], this->fieldPatterns_[fieldId]
+            ));
+          }
+        }
+
+        if ( ! faFptrnData.empty()) {
+          const auto faFptrn = Teuchos::make_rcp<panzer::FieldAggPattern>(faFptrnData, this->ga_fp_);
+          this->fa_fps_.push_back(faFptrn);
+
+          // How many global Ids are in this element block?
+          this->elementBlockGIDCount_.push_back(faFptrn->numberIds());
+        } else {
+          this->fa_fps_.push_back(Teuchos::null);
+          this->elementBlockGIDCount_.push_back(0);
+        }
+      }
+
+      // Create map from local to global Ids of entities
+      const auto overlap_map = this->buildOverlapMapFromElements(access);
+
+      // Create multivector that provides for each entity (row) and variable (column) the number of dofs
+      // that the basis for this variable puts on this entity
+      const auto overlap_mv = Teuchos::make_rcp<multivector_type>(overlap_map, numFields, true); // true to zero out
+      
+      for (size_t blockIdAsOrd = 0; blockIdAsOrd < this->blockOrder_.size(); ++blockIdAsOrd) {
+        // Extract data from field aggregate field pattern
+        const auto numEntiesPerElmt  = static_cast<size_t>(this->ga_fp_->numberIds());
+
+        const global_ordinal_2d_host_view_type numDofFIdsForEachEntyAndField_h(
+          Kokkos::view_alloc("number of dofFIds per entity and per field"),
+          numEntiesPerElmt, numFields
+        );
+
+        // Vector that contains the number of @c dofEId for each @c entyEId
+        const std::vector<local_ordinal_type> numDofEIdsForEachEnty = this->fa_fps_[blockIdAsOrd]->numFieldsPerId();
+
+        // Vector that contains the @c fieldId for each @c dofEId.
+        const std::vector<local_ordinal_type> fieldIdForEachDofEId = this->fa_fps_[blockIdAsOrd]->fieldIds();
+
+        size_t dofEId = 0;
+        for (size_t entyEId = 0; entyEId < numEntiesPerElmt; ++entyEId) {
+            for (int idx = 0; idx < numDofEIdsForEachEnty[entyEId]; ++idx) {
+                ++numDofFIdsForEachEntyAndField_h(entyEId, fieldIdForEachDofEId[dofEId]);
+                ++dofEId;
+            }
+        }
+
+        const auto numDofFIdsForEachEntyAndField_d = Kokkos::create_mirror_view_and_copy(
+          Kokkos::view_alloc(memory_space{}),
+          numDofFIdsForEachEntyAndField_h
+        );
+
+        const auto ownedElmtLIds_d = connMngr->getElementBlockDevice(this->blockOrder_[blockIdAsOrd]);
+
+        const auto numOwnedElmts = ownedElmtLIds_d.size();
+
+        const auto conn_d = connMngr->getConnectivityDevice();
+
+        const auto local_overlap_map = overlap_map->getLocalMap();
+
+        const auto local_overlap_mv = overlap_mv->getLocalViewDevice(Tpetra::Access::OverwriteAll);
+
+        Kokkos::parallel_for(
+          "fill tagged multivector",
+          Kokkos::MDRangePolicy<execution_space, Kokkos::Rank<2>>({0, 0}, {numOwnedElmts, numEntiesPerElmt}),
+          KOKKOS_LAMBDA (const local_ordinal_type idx, const local_ordinal_type entyEId) {
+            const auto ownedElmtLId = ownedElmtLIds_d(idx);
+            const global_ordinal_type entyGId = conn_d.rowConst(ownedElmtLId).operator()(entyEId);
+            const local_ordinal_type  entyLId = local_overlap_map.getLocalElement(entyGId);
+            for (size_t fieldId = 0; fieldId < numFields; ++fieldId) {
+                Kokkos::atomic_max(&local_overlap_mv(entyLId, fieldId), numDofFIdsForEachEntyAndField_d(entyEId, fieldId));
+            }
+          }
+        );
+      }
+
+      return overlap_mv;
+    }
+
+  };
+
+} // namespace panzer::Experimental
 
 #endif

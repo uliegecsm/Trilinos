@@ -47,11 +47,11 @@
 #include <Teuchos_DefaultMpiComm.hpp>
 #include <Teuchos_CommHelpers.hpp>
 
-// #include "Kokkos_DynRankView.hpp"
-#include "Intrepid2_FieldContainer.hpp"
+#include "Kokkos_DynRankView.hpp"
 
 #include "Intrepid2_HGRAD_HEX_C1_FEM.hpp"
 #include "Intrepid2_HGRAD_HEX_C2_FEM.hpp"
+#include "Intrepid2_HGRAD_QUAD_Cn_FEM.hpp"
 #include "Intrepid2_HDIV_HEX_I1_FEM.hpp"
 #include "Intrepid2_HCURL_HEX_I1_FEM.hpp"
 
@@ -69,35 +69,27 @@ using Teuchos::rcp_dynamic_cast;
 using Teuchos::RCP;
 using Teuchos::rcpFromRef;
 
-namespace panzer {
-namespace unit_test {
+namespace panzer::unit_test {
 
-typedef CartesianConnManager<int,panzer::GlobalOrdinal>::Triplet<panzer::GlobalOrdinal> Triplet;
+using Triplet = CartesianConnManager::Triplet<panzer::GlobalOrdinal>;
 
-typedef Kokkos::DynRankView<double,PHX::Device> FieldContainer;
-
-template <typename Intrepid2Type>
-RCP<const panzer::FieldPattern> buildFieldPattern()
-{
+RCP<const panzer::FieldPattern> buildFieldPattern(
+  RCP<Intrepid2::Basis<PHX::Device, double, double>> basis
+) {
   // build a geometric pattern from a single basis
-  RCP<Intrepid2::Basis<double,FieldContainer> > basis = rcp(new Intrepid2Type);
-  RCP<const panzer::FieldPattern> pattern = rcp(new panzer::Intrepid2FieldPattern(basis));
-  return pattern;
+  return Teuchos::make_rcp<panzer::Intrepid2FieldPattern>(basis);
 }
 
-std::string getElementBlock(const Triplet & element,
-                                    const CartesianConnManager<int,panzer::GlobalOrdinal> & connManager)
-                                    
-{
+std::string getElementBlock(
+  const Triplet & element,
+  const CartesianConnManager & connManager
+) {
   int localElmtId = connManager.computeLocalBrickElementIndex(element);
   return connManager.getBlockId(localElmtId);
 }
 
-TEUCHOS_UNIT_TEST(tCartesianDOFMgr, threed)
-{
-  typedef CartesianConnManager<int,panzer::GlobalOrdinal> CCM;
-  typedef panzer::DOFManager<int,panzer::GlobalOrdinal> DOFManager;
-
+template <typename ConnManagerType, typename DOfManagerType>
+void test_threed(Teuchos::FancyOStream &out, bool &success) {
   // build global (or serial communicator)
   #ifdef HAVE_MPI
     Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
@@ -114,18 +106,18 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr, threed)
   int bx =  1, by = 2, bz = 1;
 
   // build velocity, temperature and pressure fields
-  RCP<const panzer::FieldPattern> pattern_U = buildFieldPattern<Intrepid2::Basis_HGRAD_HEX_C2_FEM<double,FieldContainer> >();
-  RCP<const panzer::FieldPattern> pattern_P = buildFieldPattern<Intrepid2::Basis_HGRAD_HEX_C1_FEM<double,FieldContainer> >();
-  RCP<const panzer::FieldPattern> pattern_T = buildFieldPattern<Intrepid2::Basis_HGRAD_HEX_C1_FEM<double,FieldContainer> >();
-  RCP<const panzer::FieldPattern> pattern_B = buildFieldPattern<Intrepid2::Basis_HDIV_HEX_I1_FEM<double,FieldContainer> >();
-  RCP<const panzer::FieldPattern> pattern_E = buildFieldPattern<Intrepid2::Basis_HCURL_HEX_I1_FEM<double,FieldContainer> >();
+  RCP<const panzer::FieldPattern> pattern_U = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HGRAD_HEX_C2_FEM<PHX::Device, double, double>>());
+  RCP<const panzer::FieldPattern> pattern_P = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HGRAD_HEX_C1_FEM<PHX::Device, double, double>>());
+  RCP<const panzer::FieldPattern> pattern_T = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HGRAD_HEX_C1_FEM<PHX::Device, double, double>>());
+  RCP<const panzer::FieldPattern> pattern_B = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HDIV_HEX_I1_FEM< PHX::Device, double, double>>());
+  RCP<const panzer::FieldPattern> pattern_E = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HCURL_HEX_I1_FEM<PHX::Device, double, double>>());
 
   // build the topology
-  RCP<CCM> connManager = rcp(new CCM);
+  const auto connManager = Teuchos::make_rcp<ConnManagerType>();
   connManager->initialize(comm,nx,ny,nz,px,py,pz,bx,by,bz);
 
   // build the dof manager, and assocaite with the topology
-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+  const auto dofManager = Teuchos::make_rcp<DOfManagerType>();
   dofManager->setConnManager(connManager,*comm.getRawMpiComm());
 
   // add TEMPERATURE field to all element blocks (MHD and solid)
@@ -321,5 +313,111 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr, threed)
     
 }
 
-} // end unit test
-} // end panzer
+TEUCHOS_UNIT_TEST(tCartesianDOFMgr, threed)
+{
+  using ConnManagerType = CartesianConnManager;
+  using DOfManagerType  = panzer::DOFManager;
+
+  test_threed<ConnManagerType, DOfManagerType>(out, success);
+}
+
+TEUCHOS_UNIT_TEST(tCartesianDOFMg_Device, threed)
+{
+  using ConnManagerType = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using DOfManagerType  = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+
+  test_threed<ConnManagerType, DOfManagerType>(out, success);
+}
+
+TEUCHOS_UNIT_TEST(tCartesianDOFMgr_Device, host2device)
+{
+  using ConnManagerType = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using DOfManagerType = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+
+  // build global communicator
+  #ifdef HAVE_MPI
+    Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
+  #else
+    THIS_REALLY_DOES_NOT_WORK
+  #endif
+
+  const int np = comm.getSize(); // number of processors
+
+  // mesh description
+  panzer::GlobalOrdinal nx = 8, ny = 4;
+  int px = np, py = 1; // npx1 processor grids
+  int bx =  1, by = 2; // 1x2 blocks
+
+  // build the topology
+  const auto connMngr = Teuchos::make_rcp<ConnManagerType>();
+  connMngr->initialize(comm, nx, ny, px, py, bx, by);
+
+  // set a field pattern and build the connectivity
+  constexpr int poly_U = 4;
+  RCP<const panzer::FieldPattern> pattern_U = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HGRAD_QUAD_Cn_FEM<PHX::Device, double, double>>(poly_U));
+  std::vector<std::pair<panzer::FieldType, RCP<const FieldPattern>>> fieldDefinition{{panzer::FieldType::CG, pattern_U}};
+  const auto geomAggFieldPattern = Teuchos::make_rcp<GeometricAggFieldPattern>(fieldDefinition);
+  connMngr->buildConnectivity(*geomAggFieldPattern);
+
+  // check panzer::Experimental::ConnManager::getElementBlockDevice by checking for each block that the returned device view
+  // contains the same element LIds as the vector returned by panzer::ConnManager::getElementBlock.
+  std::vector<std::string> blockIds;
+  connMngr->getElementBlockIds(blockIds);
+
+  for (const std::string& blockId : blockIds) {
+    const auto      elmtLIds_d = connMngr->getElementBlockDevice(blockId);
+    const auto& exptElmtLIds_v = connMngr->getElementBlock(blockId);
+
+    TEST_EQUALITY(elmtLIds_d.size(), exptElmtLIds_v.size())
+    
+    const auto elmtLIds_h = Kokkos::create_mirror_view_and_copy(Kokkos::DefaultHostExecutionSpace{}, elmtLIds_d);
+
+    bool allEqual = false;
+    Kokkos::parallel_reduce(
+      "check equality of element Ids returned by getElementBlock and getElementBlockDevice",
+      Kokkos::RangePolicy<Kokkos::DefaultHostExecutionSpace>(0, exptElmtLIds_v.size()),
+      [&] (const size_t idx, bool &curResult) {
+        curResult = curResult && (elmtLIds_h(idx) == exptElmtLIds_v[idx]);
+      }, Kokkos::LAnd<bool>(allEqual)
+    );
+    TEST_ASSERT(allEqual)
+  }
+
+  // check panzer::Experimental::ConnManager::getConnectivityDevice by checking for each block and each element
+  // in that block that the returned device view contains the same entity GIds as those that can be accessed through
+  // the raw pointer returned by panzer::ConnManager::getConnectivity.
+  for (const std::string& blockId : blockIds) {
+    const auto conn_d = connMngr->getConnectivityDevice();
+
+    const auto offsets_h = Kokkos::create_mirror_view_and_copy(
+      Kokkos::DefaultHostExecutionSpace{},
+      conn_d.row_map
+    );
+
+    const auto entries_h = Kokkos::create_mirror_view_and_copy(
+      Kokkos::DefaultHostExecutionSpace{},
+      conn_d.entries
+    );
+
+    const auto& elmtLIds_v = connMngr->getElementBlock(blockId);
+
+    for (typename std::vector<panzer::LocalOrdinal>::size_type idx = 0; idx < elmtLIds_v.size(); ++idx) {
+      const panzer::LocalOrdinal elmtLId = elmtLIds_v[idx];
+
+      TEST_EQUALITY(static_cast<panzer::LocalOrdinal>(offsets_h(elmtLId + 1) - offsets_h(elmtLId)), connMngr->getConnectivitySize(elmtLId))
+
+      bool allEqual = false;
+      Kokkos::parallel_reduce(
+        "check equality of connectivity arrays returned by getConnectivity and getConnectivityDevice",
+        Kokkos::RangePolicy<Kokkos::DefaultHostExecutionSpace>(0, connMngr->getConnectivitySize(elmtLId)),
+        [&] (const size_t idx, bool &curResult) {
+          curResult = curResult && (entries_h(offsets_h(elmtLId) + idx) == connMngr->getConnectivity(elmtLId)[idx]);
+        }, Kokkos::LAnd<bool>(allEqual)
+      );
+      TEST_ASSERT(allEqual)
+    }
+  }
+
+}
+
+} // namespace panzer::unit_test
