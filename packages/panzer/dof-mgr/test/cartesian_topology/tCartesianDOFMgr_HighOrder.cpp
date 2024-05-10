@@ -71,22 +71,22 @@ namespace panzer::unit_test {
 
 using Triplet = CartesianConnManager::Triplet<panzer::GlobalOrdinal>;
 
-RCP<const panzer::FieldPattern> buildFieldPattern(RCP<Intrepid2::Basis<PHX::Device,double,double> > basis)
-{
+RCP<const panzer::FieldPattern> buildFieldPattern(
+  RCP<Intrepid2::Basis<PHX::Device,double,double> > basis
+) {
   // build a geometric pattern from a single basis
-  RCP<const panzer::FieldPattern> pattern = rcp(new panzer::Intrepid2FieldPattern(basis));
-  return pattern;
+  return Teuchos::make_rcp<panzer::Intrepid2FieldPattern>(basis);
 }
 
-std::string getElementBlock(const Triplet & element,
-                                    const CartesianConnManager & connManager)
-                                    
-{
+std::string getElementBlock(
+  const Triplet & element,
+  const CartesianConnManager & connManager
+) {
   int localElmtId = connManager.computeLocalBrickElementIndex(element);
   return connManager.getBlockId(localElmtId);
 }
 
-template <typename CCM, typename DofManager>
+template <typename ConnManagerType, typename DOfManagerType>
 void test_ho_gid_values(Teuchos::FancyOStream &out, bool &success)
 {
   // build global (or serial communicator)
@@ -103,19 +103,19 @@ void test_ho_gid_values(Teuchos::FancyOStream &out, bool &success)
   panzer::GlobalOrdinal nx = 8, ny = 4;//, nz = 4;
   //panzer::GlobalOrdinal nx = 4, ny = 3;//, nz = 4;
   int px = np, py = 1;//, pz = 1; // npx1 processor grids
-  int bx =  1, by = 2;//, bz = 1; // 1x2 blocks
+  int bx =  1, by = 1;//, bz = 1; // 1x1 blocks
 
   const int poly_U = 4;
   const int poly_P = 3;
-  RCP<const panzer::FieldPattern> pattern_U = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HGRAD_QUAD_Cn_FEM<PHX::Device,double,double>>( poly_U ));
-  RCP<const panzer::FieldPattern> pattern_P = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HGRAD_QUAD_Cn_FEM<PHX::Device,double,double>>( poly_P ));
+  RCP<const panzer::FieldPattern> pattern_U = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HGRAD_QUAD_Cn_FEM<PHX::Device,double,double>>(poly_U));
+  RCP<const panzer::FieldPattern> pattern_P = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HGRAD_QUAD_Cn_FEM<PHX::Device,double,double>>(poly_P));
 
   // build the topology
-  RCP<CCM> connManager = rcp(new CCM);
+  const auto connManager = Teuchos::make_rcp<ConnManagerType>();
   connManager->initialize(comm,nx,ny,px,py,bx,by);
 
   // build the dof manager, and assocaite with the topology
-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+  const auto dofManager = Teuchos::make_rcp<DOfManagerType>();
   dofManager->setConnManager(connManager,*comm.getRawMpiComm());
 
   // add velocity (U) and PRESSURE fields to the MHD element block
@@ -178,21 +178,21 @@ void test_ho_gid_values(Teuchos::FancyOStream &out, bool &success)
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, ho_gid_values)
 {
-  using CCM = CartesianConnManager;
-  using DOFManager = panzer::DOFManager;
+  using ConnManagerType = CartesianConnManager;
+  using DOfManagerType  = panzer::DOFManager;
 
-  test_ho_gid_values<CCM, DOFManager>(out, success);
+  test_ho_gid_values<ConnManagerType, DOfManagerType>(out, success);
 }
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder_Device, ho_gid_values)
 {
-  using CCM = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
-  using DOFManager = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using ConnManagerType = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using DOfManagerType = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
 
-  test_ho_gid_values<CCM, DOFManager>(out, success);
+  test_ho_gid_values<ConnManagerType, DOfManagerType>(out, success);
 }
 
-template <typename CCM, typename DofManager>
+template <typename ConnManagerType, typename DOfManagerType>
 void test_gid_values(Teuchos::FancyOStream &out, bool &success)
 {
   // build global (or serial communicator)
@@ -217,11 +217,11 @@ void test_gid_values(Teuchos::FancyOStream &out, bool &success)
   RCP<const panzer::FieldPattern> pattern_U = buildFieldPattern( rcp(new Intrepid2::Basis_HGRAD_QUAD_Cn_FEM<PHX::Device,double,double>( poly_U )) );
 
   // build the topology
-  RCP<CCM> connManager = rcp(new CCM);
+  const auto connManager = Teuchos::make_rcp<ConnManagerType>();
   connManager->initialize(comm,nx,ny,px,py,bx,by);
 
   // build the dof manager, and assocaite with the topology
-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+  const auto dofManager = Teuchos::make_rcp<DOfManagerType>();
   dofManager->setConnManager(connManager,*comm.getRawMpiComm());
 
   // add velocity (U) and PRESSURE fields to the MHD element block
@@ -291,21 +291,21 @@ void test_gid_values(Teuchos::FancyOStream &out, bool &success)
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, gid_values)
 {
-  using CCM = CartesianConnManager;
-  using DOFManager = panzer::DOFManager;
+  using ConnManagerType = CartesianConnManager;
+  using DOfManagerType  = panzer::DOFManager;
 
-  test_gid_values<CCM, DOFManager>(out, success);
+  test_gid_values<ConnManagerType, DOfManagerType>(out, success);
 }
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder_Device, gid_values)
 {
-  using CCM = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
-  using DOFManager = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using ConnManagerType = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using DOfManagerType  = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
 
-  test_gid_values<CCM, DOFManager>(out, success);
+  test_gid_values<ConnManagerType, DOfManagerType>(out, success);
 }
 
-template <typename CCM, typename DofManager>
+template <typename ConnManagerType, typename DOfManagerType>
 void test_quad2d(Teuchos::FancyOStream &out, bool &success)
 {
   // build global (or serial communicator)
@@ -332,11 +332,11 @@ void test_quad2d(Teuchos::FancyOStream &out, bool &success)
   RCP<const panzer::FieldPattern> pattern_T = buildFieldPattern( rcp(new Intrepid2::Basis_HGRAD_QUAD_Cn_FEM<PHX::Device,double,double>( poly_T )) );
   
   // build the topology
-  RCP<CCM> connManager = rcp(new CCM);
+  const auto connManager = Teuchos::make_rcp<ConnManagerType>();
   connManager->initialize(comm,nx,ny,px,py,bx,by);
 
   // build the dof manager, and assocaite with the topology
-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+  const auto dofManager = Teuchos::make_rcp<DOfManagerType>();
   dofManager->setConnManager(connManager,*comm.getRawMpiComm());
 
   // add TEMPERATURE field to all element blocks (MHD and solid)
@@ -547,18 +547,18 @@ void test_quad2d(Teuchos::FancyOStream &out, bool &success)
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder, quad2d)
 {
-  using CCM = CartesianConnManager;
-  using DOFManager = panzer::DOFManager;
+  using ConnManagerType = CartesianConnManager;
+  using DOfManagerType  = panzer::DOFManager;
 
-  test_quad2d<CCM, DOFManager>(out, success);
+  test_quad2d<ConnManagerType, DOfManagerType>(out, success);
 }
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMgr_HighOrder_Device, quad2d)
 {
-  using CCM = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
-  using DOFManager = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using ConnManagerType = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using DOfManagerType = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
 
-  test_quad2d<CCM, DOFManager>(out, success);
+  test_quad2d<ConnManagerType, DOfManagerType>(out, success);
 }
 
 } // namespace panzer::unit_test

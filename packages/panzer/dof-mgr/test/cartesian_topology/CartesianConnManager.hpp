@@ -344,4 +344,4 @@ class CartesianConnManager : public virtual ::panzer::unit_test::CartesianConnMa
 
 } // namespace panzer::unit_test::Experimental
 
-#endif
+#endif // __CartesianConnManager_hpp__

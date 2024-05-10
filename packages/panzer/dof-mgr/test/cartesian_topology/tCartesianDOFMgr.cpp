@@ -73,24 +73,23 @@ namespace panzer::unit_test {
 
 using Triplet = CartesianConnManager::Triplet<panzer::GlobalOrdinal>;
 
-RCP<const panzer::FieldPattern> buildFieldPattern(RCP<Intrepid2::Basis<PHX::Device, double, double>> basis)
-{
+RCP<const panzer::FieldPattern> buildFieldPattern(
+  RCP<Intrepid2::Basis<PHX::Device, double, double>> basis
+) {
   // build a geometric pattern from a single basis
-  RCP<const panzer::FieldPattern> pattern = rcp(new panzer::Intrepid2FieldPattern(basis));
-  return pattern;
+  return Teuchos::make_rcp<panzer::Intrepid2FieldPattern>(basis);
 }
 
-std::string getElementBlock(const Triplet & element,
-                                    const CartesianConnManager & connManager)
-                                    
-{
+std::string getElementBlock(
+  const Triplet & element,
+  const CartesianConnManager & connManager
+) {
   int localElmtId = connManager.computeLocalBrickElementIndex(element);
   return connManager.getBlockId(localElmtId);
 }
 
-template <typename CCM, typename DofManager>
-void test_threed(Teuchos::FancyOStream &out, bool &success)
-{
+template <typename ConnManagerType, typename DOfManagerType>
+void test_threed(Teuchos::FancyOStream &out, bool &success) {
   // build global (or serial communicator)
   #ifdef HAVE_MPI
     Teuchos::MpiComm<int> comm(MPI_COMM_WORLD);
@@ -114,11 +113,11 @@ void test_threed(Teuchos::FancyOStream &out, bool &success)
   RCP<const panzer::FieldPattern> pattern_E = buildFieldPattern(Teuchos::make_rcp<Intrepid2::Basis_HCURL_HEX_I1_FEM<PHX::Device, double, double>>());
 
   // build the topology
-  RCP<CCM> connManager = rcp(new CCM);
+  const auto connManager = Teuchos::make_rcp<ConnManagerType>();
   connManager->initialize(comm,nx,ny,nz,px,py,pz,bx,by,bz);
 
   // build the dof manager, and assocaite with the topology
-  RCP<DOFManager> dofManager = rcp(new DOFManager);
+  const auto dofManager = Teuchos::make_rcp<DOfManagerType>();
   dofManager->setConnManager(connManager,*comm.getRawMpiComm());
 
   // add TEMPERATURE field to all element blocks (MHD and solid)
@@ -316,24 +315,24 @@ void test_threed(Teuchos::FancyOStream &out, bool &success)
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMgr, threed)
 {
-  using CCM = CartesianConnManager;
-  using DOFManager = panzer::DOFManager;
+  using ConnManagerType = CartesianConnManager;
+  using DOfManagerType  = panzer::DOFManager;
 
-  test_threed<CCM, DOFManager>(out, success);
+  test_threed<ConnManagerType, DOfManagerType>(out, success);
 }
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMg_Device, threed)
 {
-  using CCM = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
-  using DOFManager = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using ConnManagerType = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using DOfManagerType  = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
 
-  test_threed<CCM, DOFManager>(out, success);
+  test_threed<ConnManagerType, DOfManagerType>(out, success);
 }
 
 TEUCHOS_UNIT_TEST(tCartesianDOFMgr_Device, host2device)
 {
-  using CCM = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
-  using DOFManager = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using ConnManagerType = panzer::unit_test::Experimental::CartesianConnManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
+  using DOfManagerType = panzer::Experimental::DOFManager<panzer::LocalOrdinal, panzer::GlobalOrdinal, Kokkos::DefaultExecutionSpace>;
 
   // build global communicator
   #ifdef HAVE_MPI
@@ -350,7 +349,7 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_Device, host2device)
   int bx =  1, by = 2; // 1x2 blocks
 
   // build the topology
-  const auto connMngr = Teuchos::make_rcp<CCM>();
+  const auto connMngr = Teuchos::make_rcp<ConnManagerType>();
   connMngr->initialize(comm, nx, ny, px, py, bx, by);
 
   // set a field pattern and build the connectivity
@@ -359,68 +358,65 @@ TEUCHOS_UNIT_TEST(tCartesianDOFMgr_Device, host2device)
   std::vector<std::pair<panzer::FieldType, RCP<const FieldPattern>>> fieldDefinition{{panzer::FieldType::CG, pattern_U}};
   const auto geomAggFieldPattern = Teuchos::make_rcp<GeometricAggFieldPattern>(fieldDefinition);
   connMngr->buildConnectivity(*geomAggFieldPattern);
-  
-  // check getElementBlockDevice
-  std::vector<std::string> elmtBlockIds;
-  connMngr->getElementBlockIds(elmtBlockIds);
 
-  std::for_each(
-    elmtBlockIds.cbegin(), elmtBlockIds.cend(),
-    [&] (const auto& elmtBlockId) {
-      const auto      elmtBlock_d = connMngr->getElementBlockDevice(elmtBlockId);
-      const auto& exptElmtBlock_v = connMngr->getElementBlock(elmtBlockId);
+  // check panzer::Experimental::ConnManager::getElementBlockDevice by checking for each block that the returned device view
+  // contains the same element LIds as the vector returned by panzer::ConnManager::getElementBlock.
+  std::vector<std::string> blockIds;
+  connMngr->getElementBlockIds(blockIds);
 
-      TEST_EQUALITY(elmtBlock_d.size(), exptElmtBlock_v.size())
-      
-      const auto elmtBlock_h = Kokkos::create_mirror_view_and_copy(Kokkos::DefaultHostExecutionSpace{}, elmtBlock_d);
+  for (const std::string& blockId : blockIds) {
+    const auto      elmtLIds_d = connMngr->getElementBlockDevice(blockId);
+    const auto& exptElmtLIds_v = connMngr->getElementBlock(blockId);
+
+    TEST_EQUALITY(elmtLIds_d.size(), exptElmtLIds_v.size())
+    
+    const auto elmtLIds_h = Kokkos::create_mirror_view_and_copy(Kokkos::DefaultHostExecutionSpace{}, elmtLIds_d);
+
+    bool allEqual = false;
+    Kokkos::parallel_reduce(
+      "check equality of element Ids returned by getElementBlock and getElementBlockDevice",
+      Kokkos::RangePolicy<Kokkos::DefaultHostExecutionSpace>(0, exptElmtLIds_v.size()),
+      [&] (const size_t idx, bool &curResult) {
+        curResult = curResult && (elmtLIds_h(idx) == exptElmtLIds_v[idx]);
+      }, Kokkos::LAnd<bool>(allEqual)
+    );
+    TEST_ASSERT(allEqual)
+  }
+
+  // check panzer::Experimental::ConnManager::getConnectivityDevice by checking for each block and each element
+  // in that block that the returned device view contains the same entity GIds as those that can be accessed through
+  // the raw pointer returned by panzer::ConnManager::getConnectivity.
+  for (const std::string& blockId : blockIds) {
+    const auto conn_d = connMngr->getConnectivityDevice();
+
+    const auto offsets_h = Kokkos::create_mirror_view_and_copy(
+      Kokkos::DefaultHostExecutionSpace{},
+      conn_d.row_map
+    );
+
+    const auto entries_h = Kokkos::create_mirror_view_and_copy(
+      Kokkos::DefaultHostExecutionSpace{},
+      conn_d.entries
+    );
+
+    const auto& elmtLIds_v = connMngr->getElementBlock(blockId);
+
+    for (typename std::vector<panzer::LocalOrdinal>::size_type idx = 0; idx < elmtLIds_v.size(); ++idx) {
+      const panzer::LocalOrdinal elmtLId = elmtLIds_v[idx];
+
+      TEST_EQUALITY(static_cast<panzer::LocalOrdinal>(offsets_h(elmtLId + 1) - offsets_h(elmtLId)), connMngr->getConnectivitySize(elmtLId))
 
       bool allEqual = false;
       Kokkos::parallel_reduce(
-        "check equality of element Ids returned by getElementBlock and getElementBlockDevice",
-        Kokkos::RangePolicy<Kokkos::DefaultHostExecutionSpace>(0, exptElmtBlock_v.size()),
+        "check equality of connectivity arrays returned by getConnectivity and getConnectivityDevice",
+        Kokkos::RangePolicy<Kokkos::DefaultHostExecutionSpace>(0, connMngr->getConnectivitySize(elmtLId)),
         [&] (const size_t idx, bool &curResult) {
-          curResult = curResult && (elmtBlock_h(idx) == exptElmtBlock_v[idx]);
+          curResult = curResult && (entries_h(offsets_h(elmtLId) + idx) == connMngr->getConnectivity(elmtLId)[idx]);
         }, Kokkos::LAnd<bool>(allEqual)
       );
       TEST_ASSERT(allEqual)
     }
-  );
-
-  // check getConnectivityDevice
-  std::for_each(
-    elmtBlockIds.cbegin(), elmtBlockIds.cend(),
-    [&] (const auto& elmtBlockId) {
-      const auto conn_d = connMngr->getConnectivityDevice();
-
-      const auto offsets_h = Kokkos::create_mirror_view_and_copy(
-        Kokkos::DefaultHostExecutionSpace{},
-        conn_d.row_map
-      );
-
-      const auto entries_h = Kokkos::create_mirror_view_and_copy(
-        Kokkos::DefaultHostExecutionSpace{},
-        conn_d.entries
-      );
-
-      const auto& elmtBlock_v = connMngr->getElementBlock(elmtBlockId);
-
-      for (typename std::vector<panzer::LocalOrdinal>::size_type idx = 0; idx < elmtBlock_v.size(); ++idx) {
-        const panzer::LocalOrdinal localElmtId = elmtBlock_v[idx];
-
-        TEST_EQUALITY(static_cast<panzer::LocalOrdinal>(offsets_h(localElmtId + 1) - offsets_h(localElmtId)), connMngr->getConnectivitySize(localElmtId))
-
-        bool allEqual = false;
-        Kokkos::parallel_reduce(
-          "check equality of connectivity arrays returned by getConnectivity and getConnectivityDevice",
-          Kokkos::RangePolicy<Kokkos::DefaultHostExecutionSpace>(0, connMngr->getConnectivitySize(localElmtId)),
-          [&] (const size_t idx, bool &curResult) {
-            curResult = curResult && (entries_h(offsets_h(localElmtId) + idx) == connMngr->getConnectivity(localElmtId)[idx]);
-          }, Kokkos::LAnd<bool>(allEqual)
-        );
-        TEST_ASSERT(allEqual)
-      }
-    }
-  );
+  }
 
 }
 

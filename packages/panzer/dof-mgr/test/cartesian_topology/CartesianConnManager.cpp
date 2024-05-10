@@ -49,8 +49,7 @@ using Teuchos::rcp_dynamic_cast;
 using Teuchos::RCP;
 using Teuchos::rcpFromRef;
 
-namespace panzer {
-namespace unit_test {
+namespace panzer::unit_test {
 
 void CartesianConnManager::
 initialize(const Teuchos::MpiComm<int> & comm,GlobalOrdinal nx, GlobalOrdinal ny,
@@ -902,5 +901,4 @@ CartesianConnManager::updateConnectivity_3d(const panzer::FieldPattern & fp,
   }
 }
 
-} // end unit test
-} // end panzer
+} // namespace panzer::unit_test
