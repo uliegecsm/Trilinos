@@ -782,7 +782,7 @@ namespace Sacado {                                                      \
 
 MP_BINARYOP_MACRO(atan2, Atan2Op, atan2, using std::atan2;)
 MP_BINARYOP_MACRO(pow  , PowerOp, pow  , using std::pow;  )
-#ifdef __CUDACC__
+#if defined(__CUDACC__) && !defined(__clang__)
 MP_BINARYOP_MACRO(max, MaxOp, ::max, using std::max;)
 MP_BINARYOP_MACRO(min, MinOp, ::min, using std::min;)
 #else
