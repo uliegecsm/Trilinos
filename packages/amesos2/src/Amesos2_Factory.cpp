@@ -131,6 +131,12 @@ namespace Amesos2 {
     }
 #endif
 
+#ifdef HAVE_AMESOS2_CUDSS
+    if (solverName == "amesos2_cudss" || solverName == "cudss") {
+      return true;
+    }
+#endif
+
 #ifdef HAVE_AMESOS2_CUSOLVER
     if (solverName == "amesos2_cusolver" || solverName == "cusolver") {
       return true;

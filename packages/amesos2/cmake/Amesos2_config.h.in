@@ -96,6 +96,9 @@
 /* Defined if you want to enable amesos2-STRUMPACK */
 #cmakedefine HAVE_AMESOS2_STRUMPACK
 
+/* Defined if you want to enable amesos2-cuDSS */
+#cmakedefine HAVE_AMESOS2_CUDSS
+
 /* Defined if you want to enable amesos2-cuSPARSE */
 #cmakedefine HAVE_AMESOS2_CUSPARSE
 

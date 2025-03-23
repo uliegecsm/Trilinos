@@ -144,6 +144,9 @@ public:
       else if (Amesos2::query ("cholmod")) {
         solverName_ = "cholmod";
       }
+      else if (Amesos2::query ("cudss")) {
+        solverName_ = "cudss";
+      }
       else if (Amesos2::query ("cusolver")) {
         solverName_ = "cusolver";
       }

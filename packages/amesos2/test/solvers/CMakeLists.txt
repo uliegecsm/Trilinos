@@ -5,6 +5,24 @@ TRIBITS_ADD_EXECUTABLE(
   SOURCES Solver_Test.cpp
   )
 
+##### cuDSS Tests #####
+
+IF(${PACKAGE_NAME}_ENABLE_CUDSS)
+  TRIBITS_COPY_FILES_TO_BINARY_DIR(
+    SolverTestcuDSSFiles
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+    SOURCE_FILES cuDSS_test.xml
+    EXEDEPS Solver_Test)
+
+  TRIBITS_ADD_TEST(
+    Solver_Test
+    NAME cuDSS_Solver_Test
+    ARGS "--xml-params=cuDSS_test.xml --filedir=${CMAKE_CURRENT_BINARY_DIR}/../matrices/ --multiple-solves --refactor"
+    STANDARD_PASS_OUTPUT
+    NUM_MPI_PROCS 1
+    COMM serial mpi
+    )
+ENDIF()
 
 ##### cuSOLVER Tests #####
 

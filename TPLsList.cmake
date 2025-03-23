@@ -4,6 +4,7 @@ TRIBITS_REPOSITORY_DEFINE_TPLS(
   Peano           "cmake/TPLs/"    EX
   CUDA            "${${PROJECT_NAME}_TRIBITS_DIR}/core/std_tpls/"    PT
   CUBLAS          "cmake/TPLs/"    PT
+  CUDSS           "cmake/TPLs/"    PT
   CUSOLVER        "cmake/TPLs/"    PT
   CUSPARSE        "cmake/TPLs/"    PT
   Thrust          "cmake/TPLs/"    ST
